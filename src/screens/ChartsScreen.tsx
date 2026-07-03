@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useUi } from '@/store/uiStore'
+import { useSettings } from '@/store/settingsStore'
 import { INSURANCE_STAT_KEY, useStats } from '@/store/statsStore'
 import PlayingCard from '@/components/PlayingCard'
-import { HARD, PAIRS, SOFT, UPCARDS, type CellCode } from '@/engine/basicStrategy'
+import { UPCARDS, strategyTablesFor, type CellCode } from '@/engine/basicStrategy'
 import {
   indexPlaysForSpot,
   sampleCards,
@@ -10,8 +11,8 @@ import {
   type ChartKind,
   type ChartSpot,
 } from '@/engine/chartSpots'
-import { INDEX_PLAYS } from '@/engine/deviations'
-import type { IndexPlay, UpcardValue } from '@/types'
+import { getIndexPlays } from '@/engine/deviations'
+import type { IndexPlay, Ruleset, UpcardValue } from '@/types'
 
 // ============================================================================
 // Strategy Charts screen: renders the exact HARD/SOFT/PAIRS tables the
@@ -37,11 +38,12 @@ const CODE_COLOR: Record<CellCode, string> = {
   Ph: '#7c3aed', // split (DAS only)
   R: '#e11d48', // surrender (else hit)
   Rs: '#e11d48', // surrender (else stand)
+  Rp: '#e11d48', // surrender (else split)
 }
 
 /** The single letter shown inside a cell (conditional codes show their base). */
 const CODE_LETTER: Record<CellCode, string> = {
-  H: 'H', S: 'S', D: 'D', Ds: 'D', P: 'P', Ph: 'P', R: 'R', Rs: 'R',
+  H: 'H', S: 'S', D: 'D', Ds: 'D', P: 'P', Ph: 'P', R: 'R', Rs: 'R', Rp: 'R',
 }
 
 /** Short action name, for aria-labels and the legend. */
@@ -54,6 +56,7 @@ const CODE_SHORT: Record<CellCode, string> = {
   Ph: 'Split',
   R: 'Surrender',
   Rs: 'Surrender',
+  Rp: 'Surrender',
 }
 
 /** Full cell meaning, spelled out in the detail overlay. */
@@ -66,6 +69,7 @@ const CODE_MEANING: Record<CellCode, string> = {
   Ph: 'Split only when double-after-split is allowed, otherwise play as the total',
   R: 'Surrender if allowed, otherwise hit',
   Rs: 'Surrender if allowed, otherwise stand',
+  Rp: 'Surrender if allowed, otherwise split',
 }
 
 // Accuracy-mode buckets. Text (the % under the letter) is the secondary
@@ -86,12 +90,6 @@ function accuracyColor(attempts: number, pct: number): string {
 }
 
 // --- Chart metadata -----------------------------------------------------------
-const TABLES: Record<ChartKind, Record<number, CellCode[]>> = {
-  hard: HARD,
-  soft: SOFT,
-  pair: PAIRS,
-}
-
 const TABS: { kind: ChartKind; label: string }[] = [
   { kind: 'hard', label: 'Hard' },
   { kind: 'soft', label: 'Soft' },
@@ -142,8 +140,8 @@ function spokenRow(kind: ChartKind, row: number): string {
  * grid renders highest total at the top, lowest at the bottom, so scanning
  * down the chart follows a hand getting weaker.
  */
-function rowsOf(kind: ChartKind): number[] {
-  return Object.keys(TABLES[kind])
+function rowsOf(kind: ChartKind, ruleset: Ruleset): number[] {
+  return Object.keys(strategyTablesFor(ruleset)[kind])
     .map(Number)
     .sort((a, b) => b - a)
 }
@@ -155,13 +153,18 @@ type ColorMode = 'strategy' | 'accuracy'
 export default function ChartsScreen() {
   const go = useUi((s) => s.go)
   const spots = useStats((s) => s.spots)
+  const ruleset = useSettings((s) => s.ruleset)
+  const surrenderEnabled = useSettings((s) => s.surrenderEnabled)
+  const dasEnabled = useSettings((s) => s.dasEnabled)
 
   const [kind, setKind] = useState<ChartKind>('hard')
   const [colorMode, setColorMode] = useState<ColorMode>('strategy')
   const [selected, setSelected] = useState<ChartSpot | null>(null)
 
-  const rows = rowsOf(kind)
-  const table = TABLES[kind]
+  const tables = strategyTablesFor(ruleset)
+  const rows = rowsOf(kind, ruleset)
+  const table = tables[kind]
+  const indexPlays = getIndexPlays({ ruleset, surrenderEnabled, dasEnabled })
 
   // Per-chart summary: trained cells + overall accuracy across the visible tab.
   let trainedCells = 0
@@ -180,7 +183,7 @@ export default function ChartsScreen() {
   const totalCells = rows.length * UPCARDS.length
   const overallPct = sumAttempts > 0 ? Math.round((sumCorrect / sumAttempts) * 100) : null
 
-  const insurancePlay = INDEX_PLAYS.find((p) => p.kind === 'insurance')
+  const insurancePlay = indexPlays.find((p) => p.kind === 'insurance')
 
   const handleReset = () => {
     if (window.confirm('Reset all chart training stats? This cannot be undone.')) {
@@ -310,6 +313,7 @@ export default function ChartsScreen() {
                 codes={table[row]}
                 colorMode={colorMode}
                 spots={spots}
+                indexPlays={indexPlays}
                 onSelect={setSelected}
               />
             ))}
@@ -388,7 +392,14 @@ export default function ChartsScreen() {
         </div>
       </div>
 
-      {selected && <SpotDetail spot={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <SpotDetail
+          spot={selected}
+          tables={tables}
+          indexPlays={indexPlays}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   )
 }
@@ -401,6 +412,7 @@ function RowCells({
   codes,
   colorMode,
   spots,
+  indexPlays,
   onSelect,
 }: {
   kind: ChartKind
@@ -408,6 +420,7 @@ function RowCells({
   codes: CellCode[]
   colorMode: ColorMode
   spots: Record<string, { attempts: number; correct: number }>
+  indexPlays: IndexPlay[]
   onSelect: (spot: ChartSpot) => void
 }) {
   return (
@@ -429,8 +442,8 @@ function RowCells({
         // "empty" until it has data; everywhere else the letter is bold white.
         const letterColor =
           accuracyMode && attempts === 0 ? 'rgba(255, 255, 255, 0.45)' : '#ffffff'
-        const conditional = code === 'Ds' || code === 'Ph' || code === 'Rs'
-        const play = indexPlaysForSpot(spot)[0]
+        const conditional = code === 'Ds' || code === 'Ph' || code === 'Rs' || code === 'Rp'
+        const play = indexPlaysForSpot(spot, indexPlays)[0]
 
         const aria =
           `${spokenRow(kind, row)} versus ${up === 11 ? 'ace' : up}: ${CODE_SHORT[code]}, ` +
@@ -529,11 +542,21 @@ function RowCells({
 
 // --- Detail overlay ------------------------------------------------------------
 
-function SpotDetail({ spot, onClose }: { spot: ChartSpot; onClose: () => void }) {
+function SpotDetail({
+  spot,
+  tables,
+  indexPlays,
+  onClose,
+}: {
+  spot: ChartSpot
+  tables: Record<ChartKind, Record<number, CellCode[]>>
+  indexPlays: IndexPlay[]
+  onClose: () => void
+}) {
   const stat = useStats((s) => s.spots[spotKey(spot)])
-  const code = TABLES[spot.kind][spot.row][UPCARDS.indexOf(spot.upcard)]
+  const code = tables[spot.kind][spot.row][UPCARDS.indexOf(spot.upcard)]
   const { player, dealer } = sampleCards(spot)
-  const plays = indexPlaysForSpot(spot)
+  const plays = indexPlaysForSpot(spot, indexPlays)
 
   // aria-modal promises AT users that the background is inert, so the dialog
   // has to actually behave that way: move focus in on open, keep Tab cycling

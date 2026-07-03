@@ -65,7 +65,12 @@ eq('16 v10 surrenderON = surrender', basicStrategyAction([c('10'), c('6')], c('1
 eq('A,7 v2 = stand (fixed)', bs([c('A'), c('7')], c('2')), 'stand')
 eq('A,7 v3 = double', bs([c('A'), c('7')], c('3')), 'double')
 eq('A,7 v9 = hit', bs([c('A'), c('7')], c('9')), 'hit')
-eq('11 vA = double', bs([c('5'), c('6')], c('A')), 'double')
+eq('11 vA S17 = hit', bs([c('5'), c('6')], c('A')), 'hit')
+eq(
+  '11 vA H17 = double',
+  basicStrategyAction([c('5'), c('6')], c('A'), { canDouble: true, canSplit: true, canSurrender: false, das: true, ruleset: 'H17' }).action,
+  'double',
+)
 eq('16 v10 = hit (basic)', bs([c('10'), c('6')], c('10')), 'hit')
 eq('8,8 v10 = split', bs([c('8'), c('8')], c('10')), 'split')
 eq('12 v4 = stand', bs([c('10'), c('2')], c('4')), 'stand')
@@ -85,8 +90,9 @@ const ctx = (cards: Card[], up: Card, tc: number, over: Partial<StrategyContext>
   dasEnabled: true,
   ...over,
 })
-eq('16v10 TC0 -> stand (dev)', getCorrectPlay(ctx([c('10'), c('6')], c('10'), 0)).action, 'stand')
+eq('16v10 TC0 surrON -> surrender (dev)', getCorrectPlay(ctx([c('10'), c('6')], c('10'), 0)).action, 'surrender')
 eq('16v10 TC0 isDeviation', getCorrectPlay(ctx([c('10'), c('6')], c('10'), 0)).isDeviation, true)
+eq('16v10 TC0 noSurr -> stand (dev)', getCorrectPlay(ctx([c('10'), c('6')], c('10'), 0, { canSurrender: false })).action, 'stand')
 eq('16v10 TC-1 noSurr -> hit (no dev)', getCorrectPlay(ctx([c('10'), c('6')], c('10'), -1, { canSurrender: false })).action, 'hit')
 eq('12v4 TC0 -> stand (dev)', getCorrectPlay(ctx([c('10'), c('2')], c('4'), 0)).action, 'stand')
 eq('11vA TC1 -> double (dev)', getCorrectPlay(ctx([c('6'), c('5')], c('A'), 1)).action, 'double')

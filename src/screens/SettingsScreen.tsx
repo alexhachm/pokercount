@@ -284,7 +284,7 @@ export default function SettingsScreen() {
           <Row label="Ruleset" hint="Dealer stands / hits on soft 17">
             <div style={{ display: 'flex', gap: 8 }}>
               {rulesetButton('S17', 'S17', false)}
-              {rulesetButton('H17', 'H17', true)}
+              {rulesetButton('H17', 'H17', false)}
             </div>
           </Row>
           <Row label="Decks" hint="Shoe size (1–8)">

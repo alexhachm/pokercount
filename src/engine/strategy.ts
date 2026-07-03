@@ -71,11 +71,18 @@ export function getCorrectPlay(ctx: StrategyContext): StrategyDecision {
     params.total = hv.total
   }
 
-  const play: IndexPlay | undefined = findIndexPlay(kind, params)
+  const deviationRules = {
+    ruleset,
+    surrenderEnabled: ctx.canSurrender,
+    dasEnabled,
+  }
+  const play: IndexPlay | undefined = findIndexPlay(kind, params, deviationRules)
 
   let action: Action = basic.action
+  let basicAction: Action = basic.action
   let reason = basic.reason
   let indexId: string | undefined
+  let deviationFired = false
 
   // A deviation only counts when its boundary index is within the range the
   // user has chosen to memorize (when that limit is enabled). Plays outside the
@@ -90,18 +97,22 @@ export function getCorrectPlay(ctx: StrategyContext): StrategyDecision {
     // The matched index play is relevant to this spot regardless of whether it
     // fires, so surface its id and let its description drive the reason.
     indexId = play.id
-    if (shouldDeviate(play, trueCount) && deviationLegal(play.action, ctx)) {
+    basicAction = deviationLegal(play.basicAction, ctx) ? play.basicAction : basic.action
+    const triggered = shouldDeviate(play, trueCount) && deviationLegal(play.action, ctx)
+    if (triggered) {
       action = play.action
       reason = play.description
+      deviationFired = action !== basicAction
     } else {
+      action = basicAction
       reason = `${basic.reason} (no deviation: ${play.description})`
     }
   }
 
   return {
     action,
-    basicAction: basic.action,
-    isDeviation: action !== basic.action,
+    basicAction,
+    isDeviation: deviationFired,
     reason,
     indexId,
   }

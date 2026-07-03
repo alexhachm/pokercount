@@ -24,7 +24,7 @@ import { RANK_VALUE } from '@/types'
 
 // Exported so the Charts screen can render the exact tables the resolver
 // plays from — a single source of truth, no duplicated chart data.
-export type CellCode = 'H' | 'S' | 'D' | 'Ds' | 'P' | 'Ph' | 'R' | 'Rs'
+export type CellCode = 'H' | 'S' | 'D' | 'Ds' | 'P' | 'Ph' | 'R' | 'Rs' | 'Rp'
 
 // Dealer upcard columns, in order, matching each row's array indices.
 export const UPCARDS: UpcardValue[] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -40,14 +40,14 @@ function upcardValue(card: Card): UpcardValue {
 
 // --- Hard totals 5..21 ------------------------------------------------------
 // Row keys are the hard total; columns are dealer 2,3,4,5,6,7,8,9,10,A.
-export const HARD: Record<number, CellCode[]> = {
+const HARD_S17: Record<number, CellCode[]> = {
   5:  ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
   6:  ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
   7:  ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
   8:  ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
   9:  ['H', 'D', 'D', 'D', 'D', 'H', 'H', 'H', 'H', 'H'],
   10: ['D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'H', 'H'],
-  11: ['D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
+  11: ['D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'H'],
   12: ['H', 'H', 'S', 'S', 'S', 'H', 'H', 'H', 'H', 'H'],
   13: ['S', 'S', 'S', 'S', 'S', 'H', 'H', 'H', 'H', 'H'],
   14: ['S', 'S', 'S', 'S', 'S', 'H', 'H', 'H', 'H', 'H'],
@@ -62,7 +62,7 @@ export const HARD: Record<number, CellCode[]> = {
 
 // --- Soft totals A,2 (13) .. A,9 (20) ---------------------------------------
 // Row keys are the soft total. Ds = double else stand; D = double else hit.
-export const SOFT: Record<number, CellCode[]> = {
+const SOFT_S17: Record<number, CellCode[]> = {
   13: ['H', 'H', 'H', 'D', 'D', 'H', 'H', 'H', 'H', 'H'], // A,2
   14: ['H', 'H', 'H', 'D', 'D', 'H', 'H', 'H', 'H', 'H'], // A,3
   15: ['H', 'H', 'D', 'D', 'D', 'H', 'H', 'H', 'H', 'H'], // A,4
@@ -76,7 +76,7 @@ export const SOFT: Record<number, CellCode[]> = {
 // --- Pairs 2,2 .. A,A -------------------------------------------------------
 // Row keys are the pair's single-card blackjack value (A=11, ten=10).
 // Ph encodes the DAS-dependent splits (only split when DAS is on).
-export const PAIRS: Record<number, CellCode[]> = {
+const PAIRS_S17: Record<number, CellCode[]> = {
   2:  ['Ph', 'Ph', 'P', 'P', 'P', 'P', 'H', 'H', 'H', 'H'], // 2,2
   3:  ['Ph', 'Ph', 'P', 'P', 'P', 'P', 'H', 'H', 'H', 'H'], // 3,3
   4:  ['H', 'H', 'H', 'Ph', 'Ph', 'H', 'H', 'H', 'H', 'H'], // 4,4
@@ -87,6 +87,38 @@ export const PAIRS: Record<number, CellCode[]> = {
   9:  ['P', 'P', 'P', 'P', 'P', 'S', 'P', 'P', 'S', 'S'],    // 9,9
   10: ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S'],    // 10,10 never split
   11: ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],    // A,A
+}
+
+const HARD_H17: Record<number, CellCode[]> = {
+  ...HARD_S17,
+  11: ['D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
+  17: ['S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'S', 'Rs'],
+}
+
+const SOFT_H17: Record<number, CellCode[]> = {
+  ...SOFT_S17,
+  17: ['D', 'D', 'D', 'D', 'D', 'H', 'H', 'H', 'H', 'H'],
+  18: ['Ds', 'Ds', 'Ds', 'Ds', 'Ds', 'S', 'S', 'H', 'H', 'H'],
+  19: ['S', 'S', 'S', 'S', 'Ds', 'S', 'S', 'S', 'S', 'S'],
+}
+
+const PAIRS_H17: Record<number, CellCode[]> = {
+  ...PAIRS_S17,
+  8: ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'Rp'],
+}
+
+export const HARD = HARD_S17
+export const SOFT = SOFT_S17
+export const PAIRS = PAIRS_S17
+
+export function strategyTablesFor(ruleset: Ruleset): {
+  hard: Record<number, CellCode[]>
+  soft: Record<number, CellCode[]>
+  pair: Record<number, CellCode[]>
+} {
+  return ruleset === 'H17'
+    ? { hard: HARD_H17, soft: SOFT_H17, pair: PAIRS_H17 }
+    : { hard: HARD_S17, soft: SOFT_S17, pair: PAIRS_S17 }
 }
 
 interface Opts {
@@ -152,6 +184,7 @@ function resolveCell(
     // exhaustive CellCode union.
     case 'P':
     case 'Ph':
+    case 'Rp':
       return 'hit'
   }
 }
@@ -181,7 +214,7 @@ export function basicStrategyAction(
   // --- Pairs first (only when exactly two equal-value cards) ---------------
   if (isPair(playerCards)) {
     const pv = RANK_VALUE[playerCards[0].rank] // pair value: A=11, tens=10
-    const row = PAIRS[pv]
+    const row = strategyTablesFor(opts.ruleset).pair[pv]
     if (row) {
       const code = row[col]
       // Underlying hand if not split: for A,A it's soft 12; otherwise hard 2*value.
@@ -201,8 +234,10 @@ export function basicStrategyAction(
   }
 
   // --- Soft totals (an ace counts as 11) ----------------------------------
-  if (soft && SOFT[total]) {
-    const code = SOFT[total][col]
+  const tables = strategyTablesFor(opts.ruleset)
+
+  if (soft && tables.soft[total]) {
+    const code = tables.soft[total][col]
     const action = resolveCell(code, { hardTotal: softAsHard(total), soft: true }, opts)
     return {
       action,
@@ -212,7 +247,7 @@ export function basicStrategyAction(
 
   // --- Hard totals --------------------------------------------------------
   const clamped = Math.min(Math.max(total, 5), 21)
-  const code = HARD[clamped][col]
+  const code = tables.hard[clamped][col]
   const action = resolveCell(code, { hardTotal: clamped, soft: false }, opts)
   return {
     action,
@@ -234,11 +269,12 @@ function resolvePairCell(
   const col = upcardIndex(up)
 
   const playAsTotal = (): Action => {
-    if (soft && SOFT[total]) {
-      return resolveCell(SOFT[total][col], { hardTotal: softAsHard(total), soft: true }, opts)
+    const tables = strategyTablesFor(opts.ruleset)
+    if (soft && tables.soft[total]) {
+      return resolveCell(tables.soft[total][col], { hardTotal: softAsHard(total), soft: true }, opts)
     }
     const clamped = Math.min(Math.max(total, 5), 21)
-    return resolveCell(HARD[clamped][col], { hardTotal: clamped, soft: false }, opts)
+    return resolveCell(tables.hard[clamped][col], { hardTotal: clamped, soft: false }, opts)
   }
 
   switch (code) {
@@ -246,6 +282,8 @@ function resolvePairCell(
       return opts.canSplit ? 'split' : playAsTotal()
     case 'Ph':
       return opts.das && opts.canSplit ? 'split' : playAsTotal()
+    case 'Rp':
+      return opts.canSurrender ? 'surrender' : opts.canSplit ? 'split' : playAsTotal()
     // 5,5 and 10,10 rows use non-split codes directly (D / S).
     case 'D':
       return opts.canDouble ? 'double' : 'hit'

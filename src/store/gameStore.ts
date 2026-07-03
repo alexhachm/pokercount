@@ -25,7 +25,7 @@ import { evaluate, isBlackjack } from '@/engine/hand'
 import { hiLoTag, trueCount as computeTrueCount } from '@/engine/count'
 import { dealerShouldHit } from '@/engine/dealer'
 import { getCorrectPlay } from '@/engine/strategy'
-import { INDEX_PLAYS } from '@/engine/deviations'
+import { getIndexPlays } from '@/engine/deviations'
 import { botDecision } from '@/engine/bots'
 import { buildDrillQueue, buildTcDrillQueue } from '@/engine/drillEngine'
 import { useSettings } from '@/store/settingsStore'
@@ -877,7 +877,12 @@ export const useGame = create<GameInternal>()(
       // Grade the bet against the Hi-Lo insurance index (take at TC >= +3).
       // The deviation-range training limit applies like any human decision:
       // with the index outside the trained range, "correct" is always decline.
-      const play = INDEX_PLAYS.find((p) => p.kind === 'insurance')
+      const st = settings()
+      const play = getIndexPlays({
+        ruleset: st.ruleset,
+        surrenderEnabled: st.surrenderEnabled,
+        dasEnabled: st.dasEnabled,
+      }).find((p) => p.kind === 'insurance')
       const range = devRange()
       const trainable =
         !!play && (!range || (play.index >= range.min && play.index <= range.max))

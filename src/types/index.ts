@@ -50,7 +50,7 @@ export interface HandValue {
 }
 
 // --- Rules / settings -------------------------------------------------------
-/** Only S17 is implemented for now; H17 reserved for a future ruleset. */
+/** Dealer stands on soft 17 (S17) or hits soft 17 (H17). */
 export type Ruleset = 'S17' | 'H17'
 export type CountSystem = 'HiLo'
 

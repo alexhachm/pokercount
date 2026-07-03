@@ -14,7 +14,6 @@
 import type { Card, IndexPlay, Rank, UpcardValue } from '@/types'
 import { RANK_VALUE } from '@/types'
 import { isPair, rawValue } from '@/engine/basicStrategy'
-import { INDEX_PLAYS } from '@/engine/deviations'
 
 export type ChartKind = 'hard' | 'soft' | 'pair'
 
@@ -117,19 +116,15 @@ export function sampleCards(spot: ChartSpot): { player: Card[]; dealer: Card } {
  * detail overlay (insurance excluded — it is not a chart cell; the Charts
  * screen surfaces it as a footer note instead).
  *
- * FIRST match only, mirroring findIndexPlay(): the grading engine resolves a
- * spot's deviation via first-match, and INDEX_PLAYS is not perfectly unique
- * per key (hard 15 v 10 carries both a stand line and a Fab-4 surrender line;
- * only the first — 'hard15v10' stand — is ever applied). Listing every raw
- * match would show the player a deviation the grader never applies and then
- * mark them wrong for following it, so the overlay must dedupe exactly the
- * way the grader does.
+ * FIRST match only, mirroring findIndexPlay(): callers pass the already
+ * canonical projected index set for the active rules, so this helper only
+ * translates chart coordinates into that flat list's key shape.
  *
  * Pair deviations key on a string Rank ('10') while pair rows are numeric
  * values, so match through RANK_VALUE.
  */
-export function indexPlaysForSpot(spot: ChartSpot): IndexPlay[] {
-  const match = INDEX_PLAYS.find((p) => {
+export function indexPlaysForSpot(spot: ChartSpot, plays: IndexPlay[]): IndexPlay[] {
+  const match = plays.find((p) => {
     if (p.kind === 'insurance') return false
     if (p.upcard !== spot.upcard) return false
     if (spot.kind === 'pair') {

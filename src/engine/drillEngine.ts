@@ -4,12 +4,12 @@
 // Turns the Hi-Lo index plays (deviations.ts) into a deterministic queue of
 // boundary-testing scenarios. For every non-insurance index play we build:
 //   1. an "at index" spot   — exact true count == play.index (deviation applies)
-//   2. an "index - 1" spot  — one count below (basic strategy applies)
+//   2. a non-trigger spot    — one TC outside the boundary (basic applies)
 // Both spots fix decksRemaining = 2, so runningCount = trueCount * 2 yields the
 // exact integer true count we want (trueCount = running / decksRemaining).
 //
 // Ordering is deterministic: all boundary spots first (in INDEX_PLAYS order),
-// then all below-index spots. No ambient randomness is used anywhere.
+// then all non-trigger spots. No ambient randomness is used anywhere.
 //
 // When `includeFalseSpots` is on, each index play additionally contributes a
 // seeded-random 1..5 "decoys": the same hand shape at the same tempting true
@@ -30,7 +30,7 @@ import {
   type TcDrillScenario,
   type UpcardValue,
 } from '@/types'
-import { INDEX_PLAYS, findIndexPlay } from '@/engine/deviations'
+import { findIndexPlay, getIndexPlays } from '@/engine/deviations'
 import { getCorrectPlay } from '@/engine/strategy'
 import { evaluate } from '@/engine/hand'
 
@@ -138,7 +138,7 @@ function tcTag(tc: number): string {
 function buildScenario(
   play: IndexPlay,
   trueCount: number,
-  phase: 'at' | 'below',
+  phase: 'at' | 'off',
   opts: DrillOpts,
 ): DrillScenario {
   const runningCount = trueCount * DECKS_REMAINING
@@ -247,7 +247,11 @@ function decoyFor(
       play.kind === 'pair'
         ? { pairRank: play.pairRank, upcard: up }
         : { total: play.total, upcard: up }
-    if (findIndexPlay(play.kind, params)) continue
+    if (findIndexPlay(play.kind, params, {
+      ruleset: opts.ruleset,
+      surrenderEnabled: opts.surrenderEnabled,
+      dasEnabled: opts.das,
+    })) continue
     const key = `${play.kind}-${play.pairRank ?? play.total}-${up}-${play.index}`
     if (taken.has(key)) continue
     taken.add(key)
@@ -281,8 +285,8 @@ function shuffled<T>(items: T[], rand: () => number): T[] {
 /**
  * Build the full drill queue: for each non-insurance index play, a boundary
  * spot (exact TC === index, deviation applies) and a below-index spot
- * (TC === index - 1, basic strategy applies). Boundary spots come first, then
- * below-index spots — fully deterministic, no Math.random.
+ * (one TC outside the boundary, basic strategy applies). Boundary spots come
+ * first, then non-trigger spots — fully deterministic, no Math.random.
  *
  * With `includeFalseSpots` on, each play contributes a seeded-random 1..5
  * decoys (no-index spots at the same true count, distinct upcards) and the
@@ -291,7 +295,12 @@ function shuffled<T>(items: T[], rand: () => number): T[] {
  */
 export function buildDrillQueue(opts: DrillOpts): DrillScenario[] {
   const range = opts.deviationRange
-  const plays = INDEX_PLAYS.filter(
+  const indexPlays = getIndexPlays({
+    ruleset: opts.ruleset,
+    surrenderEnabled: opts.surrenderEnabled,
+    dasEnabled: opts.das,
+  })
+  const plays = indexPlays.filter(
     (p) =>
       p.kind !== 'insurance' &&
       p.upcard != null &&
@@ -300,8 +309,10 @@ export function buildDrillQueue(opts: DrillOpts): DrillScenario[] {
   )
 
   const boundary = plays.map((p) => buildScenario(p, p.index, 'at', opts))
-  const below = plays.map((p) => buildScenario(p, p.index - 1, 'below', opts))
-  const queue = [...boundary, ...below]
+  const nonTrigger = plays.map((p) =>
+    buildScenario(p, p.comparator === 'gte' ? p.index - 1 : p.index + 1, 'off', opts),
+  )
+  const queue = [...boundary, ...nonTrigger]
 
   if (!opts.includeFalseSpots) return queue
 
@@ -402,7 +413,11 @@ function tcDecoyFor(
       play.kind === 'pair'
         ? { pairRank: play.pairRank, upcard: up }
         : { total: play.total, upcard: up }
-    if (findIndexPlay(play.kind, params)) continue
+    if (findIndexPlay(play.kind, params, {
+      ruleset: opts.ruleset,
+      surrenderEnabled: opts.surrenderEnabled,
+      dasEnabled: opts.das,
+    })) continue
     const key = `${play.kind}-${play.pairRank ?? play.total}-${up}`
     if (taken.has(key)) continue
     taken.add(key)
@@ -420,7 +435,12 @@ function tcDecoyFor(
  */
 export function buildTcDrillQueue(opts: DrillOpts): TcDrillScenario[] {
   const range = opts.deviationRange
-  const plays = INDEX_PLAYS.filter(
+  const indexPlays = getIndexPlays({
+    ruleset: opts.ruleset,
+    surrenderEnabled: opts.surrenderEnabled,
+    dasEnabled: opts.das,
+  })
+  const plays = indexPlays.filter(
     (p) =>
       p.kind !== 'insurance' &&
       p.upcard != null &&
