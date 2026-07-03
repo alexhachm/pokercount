@@ -3,6 +3,12 @@ import PlayingCard from '@/components/PlayingCard'
 
 export interface DealerAreaProps {
   dealer: DealerView
+  /**
+   * Render a face-down placeholder while the dealer has no cards. Turn off
+   * during the ticked opening deal so no phantom card sits there before the
+   * upcard arrives.
+   */
+  placeholder?: boolean
 }
 
 function totalText(value: HandValue): string {
@@ -16,7 +22,7 @@ function totalText(value: HandValue): string {
  * Dealer's area: a label, the dealer's cards (the second card rendered
  * face-down until holeRevealed), and the dealer total once the hole is shown.
  */
-export default function DealerArea({ dealer }: DealerAreaProps) {
+export default function DealerArea({ dealer, placeholder = true }: DealerAreaProps) {
   const { cards, value, holeRevealed } = dealer
 
   const badgeTone = value.isBust
@@ -36,10 +42,11 @@ export default function DealerArea({ dealer }: DealerAreaProps) {
             card={c}
             faceDown={!holeRevealed && i === 1}
             size="md"
-            dealDelay={i * 70}
+            // Cards mount one at a time now (per-tick dealing): no stagger.
+            dealDelay={0}
           />
         ))}
-        {cards.length === 0 && <PlayingCard faceDown size="md" />}
+        {cards.length === 0 && placeholder && <PlayingCard faceDown size="md" />}
       </div>
 
       {holeRevealed && cards.length > 0 && (

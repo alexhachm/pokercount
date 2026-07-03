@@ -9,7 +9,15 @@
 // exact integer true count we want (trueCount = running / decksRemaining).
 //
 // Ordering is deterministic: all boundary spots first (in INDEX_PLAYS order),
-// then all below-index spots. No randomness is used anywhere.
+// then all below-index spots. No ambient randomness is used anywhere.
+//
+// When `includeFalseSpots` is on, each index play additionally contributes a
+// seeded-random 1..5 "decoys": the same hand shape at the same tempting true
+// count, but against upcards that have NO Hi-Lo index — so basic strategy stays
+// correct at any count. The variable decoy count means the real/false ratio is
+// not learnable. The combined queue is then shuffled with the same seeded PRNG
+// (`shuffleSeed`) so decoys cannot be identified by position; the engine itself
+// stays a pure function of its options.
 // ============================================================================
 
 import {
@@ -19,9 +27,10 @@ import {
   type Rank,
   type Ruleset,
   type StrategyDecision,
+  type TcDrillScenario,
   type UpcardValue,
 } from '@/types'
-import { INDEX_PLAYS } from '@/engine/deviations'
+import { INDEX_PLAYS, findIndexPlay } from '@/engine/deviations'
 import { getCorrectPlay } from '@/engine/strategy'
 import { evaluate } from '@/engine/hand'
 
@@ -34,6 +43,10 @@ interface DrillOpts {
   ruleset: Ruleset
   /** When set, only drill index plays whose boundary index is in [min, max]. */
   deviationRange?: { min: number; max: number } | null
+  /** Mix in decoy spots with no index play and shuffle the queue. */
+  includeFalseSpots?: boolean
+  /** Seed for the decoy counts + shuffle; same seed => same queue. */
+  shuffleSeed?: number
 }
 
 /** Build a stable, unique Card from a rank + a tag that disambiguates the id. */
@@ -150,11 +163,120 @@ function buildScenario(
   }
 }
 
+// --- False-deviation decoys --------------------------------------------------
+
+const ALL_UPCARDS: UpcardValue[] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+/**
+ * Build a decoy spot from an index play: the same hand shape at the same
+ * tempting true count (the play's index), but against an upcard for which NO
+ * index play exists — so the correct answer is pure basic strategy. The user
+ * must recognize the spot is not indexed rather than pattern-match the count.
+ */
+function buildFalseScenario(
+  play: IndexPlay,
+  upValue: UpcardValue,
+  opts: DrillOpts,
+): DrillScenario {
+  const trueCount = play.index
+  const runningCount = trueCount * DECKS_REMAINING
+  const idTag = `false-${play.kind}-${play.pairRank ?? play.total}v${upValue}-tc${trueCount}`
+  const playerCards = playerCardsFor(play, idTag)
+  const dealerUpcard = card(upcardRank(upValue), `${idTag}-up`)
+
+  // No index play matches this (kind, total/pairRank, upcard), so this resolves
+  // to basic strategy; wrap the reason so the feedback teaches the point.
+  const base = getCorrectPlay({
+    playerCards,
+    dealerUpcard,
+    trueCount,
+    canDouble: true,
+    canSplit: play.kind === 'pair',
+    canSurrender: opts.surrenderEnabled,
+    ruleset: opts.ruleset,
+    dasEnabled: opts.das,
+    deviationRange: opts.deviationRange ?? null,
+  })
+  const correct: StrategyDecision = {
+    ...base,
+    reason: `No index play for this spot — ${base.reason}`,
+  }
+
+  const label = `${handLabel(play)} vs ${upcardLabel(upValue)} — TC ${tcTag(trueCount)}`
+
+  return {
+    id: `drill-${idTag}`,
+    indexId: 'none',
+    trueCount,
+    runningCount,
+    decksRemaining: DECKS_REMAINING,
+    playerCards,
+    dealerUpcard,
+    correct,
+    label,
+  }
+}
+
+/**
+ * Find a decoy upcard for an index play: scan upcards from a play-dependent
+ * offset (so decoys spread across the upcard range) and take the first one
+ * with no index play for this hand shape that has not been used yet. Returns
+ * null when every candidate upcard is indexed or already taken.
+ */
+function decoyFor(
+  play: IndexPlay,
+  ordinal: number,
+  opts: DrillOpts,
+  taken: Set<string>,
+): DrillScenario | null {
+  for (let i = 0; i < ALL_UPCARDS.length; i += 1) {
+    const up = ALL_UPCARDS[(ordinal + i) % ALL_UPCARDS.length]
+    if (up === play.upcard) continue
+    const params =
+      play.kind === 'pair'
+        ? { pairRank: play.pairRank, upcard: up }
+        : { total: play.total, upcard: up }
+    if (findIndexPlay(play.kind, params)) continue
+    const key = `${play.kind}-${play.pairRank ?? play.total}-${up}-${play.index}`
+    if (taken.has(key)) continue
+    taken.add(key)
+    return buildFalseScenario(play, up, opts)
+  }
+  return null
+}
+
+/** Deterministic PRNG (mulberry32) so the shuffle is a pure function of seed. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** Fisher-Yates shuffle driven by the seeded PRNG; does not mutate the input. */
+function shuffled<T>(items: T[], rand: () => number): T[] {
+  const out = [...items]
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
 /**
  * Build the full drill queue: for each non-insurance index play, a boundary
  * spot (exact TC === index, deviation applies) and a below-index spot
  * (TC === index - 1, basic strategy applies). Boundary spots come first, then
  * below-index spots — fully deterministic, no Math.random.
+ *
+ * With `includeFalseSpots` on, each play contributes a seeded-random 1..5
+ * decoys (no-index spots at the same true count, distinct upcards) and the
+ * whole queue is shuffled with the same PRNG, so real and false spots are
+ * indistinguishable by position or by ratio.
  */
 export function buildDrillQueue(opts: DrillOpts): DrillScenario[] {
   const range = opts.deviationRange
@@ -167,8 +289,147 @@ export function buildDrillQueue(opts: DrillOpts): DrillScenario[] {
 
   const boundary = plays.map((p) => buildScenario(p, p.index, 'at', opts))
   const below = plays.map((p) => buildScenario(p, p.index - 1, 'below', opts))
+  const queue = [...boundary, ...below]
 
-  return [...boundary, ...below]
+  if (!opts.includeFalseSpots) return queue
+
+  const rand = mulberry32(opts.shuffleSeed ?? 1)
+  const taken = new Set<string>()
+  const decoys: DrillScenario[] = []
+  plays.forEach((p, i) => {
+    // 1..5 decoys per play; the `taken` set makes each call pick a fresh
+    // upcard, and a play whose free upcards run out just yields fewer.
+    const n = 1 + Math.floor(rand() * 5)
+    for (let k = 0; k < n; k += 1) {
+      const d = decoyFor(p, i + k, opts, taken)
+      if (d) decoys.push(d)
+    }
+  })
+
+  return shuffled([...queue, ...decoys], rand)
+}
+
+// ============================================================================
+// TC drill: the same index-play spots, but the true count is HIDDEN. The user
+// must type the boundary TC and pick the deviation action; decoy spots (no
+// index play) are always mixed in so "No deviation" stays a live answer, and
+// the queue is always shuffled so decoys are indistinguishable by position.
+// ============================================================================
+
+/** One TC-drill spot for a real index play (answer: its index + action). */
+function buildTcScenario(play: IndexPlay): TcDrillScenario {
+  const idTag = `tc-${play.id}`
+  const upValue = play.upcard as UpcardValue
+  return {
+    id: `drill-${idTag}`,
+    indexId: play.id,
+    playerCards: playerCardsFor(play, idTag),
+    dealerUpcard: card(upcardRank(upValue), `${idTag}-up`),
+    deviationIndex: play.index,
+    comparator: play.comparator,
+    deviationAction: play.action,
+    basicAction: play.basicAction,
+    reason: play.description,
+    label: `${handLabel(play)} vs ${upcardLabel(upValue)}`,
+  }
+}
+
+/**
+ * Decoy TC-drill spot: same hand shape as an index play but against an upcard
+ * with NO Hi-Lo index, so "No deviation" is the correct answer. Basic strategy
+ * is resolved at TC 0; with no index for the spot the count cannot change it.
+ */
+function buildTcFalseScenario(
+  play: IndexPlay,
+  upValue: UpcardValue,
+  opts: DrillOpts,
+): TcDrillScenario {
+  const idTag = `tc-false-${play.kind}-${play.pairRank ?? play.total}v${upValue}`
+  const playerCards = playerCardsFor(play, idTag)
+  const dealerUpcard = card(upcardRank(upValue), `${idTag}-up`)
+  const base = getCorrectPlay({
+    playerCards,
+    dealerUpcard,
+    trueCount: 0,
+    canDouble: true,
+    canSplit: play.kind === 'pair',
+    canSurrender: opts.surrenderEnabled,
+    ruleset: opts.ruleset,
+    dasEnabled: opts.das,
+    deviationRange: opts.deviationRange ?? null,
+  })
+  return {
+    id: `drill-${idTag}`,
+    indexId: 'none',
+    playerCards,
+    dealerUpcard,
+    deviationIndex: null,
+    comparator: null,
+    deviationAction: null,
+    basicAction: base.action,
+    reason: `No index play for this spot — ${base.reason}`,
+    label: `${handLabel(play)} vs ${upcardLabel(upValue)}`,
+  }
+}
+
+/**
+ * TC-drill decoy finder: same upcard scan as decoyFor(), but keyed on hand
+ * shape + upcard alone — with no count in the prompt, that pair fully
+ * identifies a spot, so duplicates would be literally the same question.
+ */
+function tcDecoyFor(
+  play: IndexPlay,
+  ordinal: number,
+  opts: DrillOpts,
+  taken: Set<string>,
+): TcDrillScenario | null {
+  for (let i = 0; i < ALL_UPCARDS.length; i += 1) {
+    const up = ALL_UPCARDS[(ordinal + i) % ALL_UPCARDS.length]
+    if (up === play.upcard) continue
+    const params =
+      play.kind === 'pair'
+        ? { pairRank: play.pairRank, upcard: up }
+        : { total: play.total, upcard: up }
+    if (findIndexPlay(play.kind, params)) continue
+    const key = `${play.kind}-${play.pairRank ?? play.total}-${up}`
+    if (taken.has(key)) continue
+    taken.add(key)
+    return buildTcFalseScenario(play, up, opts)
+  }
+  return null
+}
+
+/**
+ * Build the TC-drill queue: one spot per non-insurance index play (surrender
+ * plays are dropped when surrender is off — their answer would be untypeable),
+ * plus a seeded-random 1..5 decoys per play. Decoys are always included and
+ * the queue always shuffled: unlike the deviation drill there is no count to
+ * anchor on, so "No deviation" must be a plausible answer for every spot.
+ */
+export function buildTcDrillQueue(opts: DrillOpts): TcDrillScenario[] {
+  const range = opts.deviationRange
+  const plays = INDEX_PLAYS.filter(
+    (p) =>
+      p.kind !== 'insurance' &&
+      p.upcard != null &&
+      (opts.surrenderEnabled || p.action !== 'surrender') &&
+      (!range || (p.index >= range.min && p.index <= range.max)),
+  )
+
+  const real = plays.map((p) => buildTcScenario(p))
+
+  const rand = mulberry32(opts.shuffleSeed ?? 1)
+  const taken = new Set<string>()
+  const decoys: TcDrillScenario[] = []
+  plays.forEach((p, i) => {
+    const n = 1 + Math.floor(rand() * 5)
+    for (let k = 0; k < n; k += 1) {
+      const d = tcDecoyFor(p, i + k, opts, taken)
+      if (d) decoys.push(d)
+    }
+  })
+
+  return shuffled([...real, ...decoys], rand)
 }
 
 // Re-export `evaluate` so drill consumers can validate generated hands from a

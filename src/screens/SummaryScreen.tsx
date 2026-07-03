@@ -78,6 +78,7 @@ export default function SummaryScreen() {
             gap: 10,
             paddingBottom: 16,
             WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
           }}
         >
           {mistakes.map((m) => (
@@ -161,16 +162,19 @@ function MistakeRow({ record }: { record: MistakeRecord }) {
         </div>
         <span style={{ color: '#a1a1aa', fontSize: 13 }}>vs</span>
         <PlayingCard card={record.dealerUpcard} size="sm" />
-        <span
-          style={{
-            marginLeft: 'auto',
-            fontSize: 12,
-            fontVariantNumeric: 'tabular-nums',
-            color: '#a1a1aa',
-          }}
-        >
-          TC {record.trueCount.toFixed(1)}
-        </span>
+        {/* TC-drill spots have no live count — the TC is the answer itself. */}
+        {record.mode !== 'tcdrill' && (
+          <span
+            style={{
+              marginLeft: 'auto',
+              fontSize: 12,
+              fontVariantNumeric: 'tabular-nums',
+              color: '#a1a1aa',
+            }}
+          >
+            TC {record.trueCount.toFixed(1)}
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

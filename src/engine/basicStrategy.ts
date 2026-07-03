@@ -22,10 +22,12 @@ import { RANK_VALUE } from '@/types'
 //          we only use Rs where the no-surrender play is to stand)
 // ============================================================================
 
-type CellCode = 'H' | 'S' | 'D' | 'Ds' | 'P' | 'Ph' | 'R' | 'Rs'
+// Exported so the Charts screen can render the exact tables the resolver
+// plays from — a single source of truth, no duplicated chart data.
+export type CellCode = 'H' | 'S' | 'D' | 'Ds' | 'P' | 'Ph' | 'R' | 'Rs'
 
 // Dealer upcard columns, in order, matching each row's array indices.
-const UPCARDS: UpcardValue[] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+export const UPCARDS: UpcardValue[] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
 function upcardIndex(u: UpcardValue): number {
   return UPCARDS.indexOf(u)
@@ -38,7 +40,7 @@ function upcardValue(card: Card): UpcardValue {
 
 // --- Hard totals 5..21 ------------------------------------------------------
 // Row keys are the hard total; columns are dealer 2,3,4,5,6,7,8,9,10,A.
-const HARD: Record<number, CellCode[]> = {
+export const HARD: Record<number, CellCode[]> = {
   5:  ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
   6:  ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
   7:  ['H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H'],
@@ -60,7 +62,7 @@ const HARD: Record<number, CellCode[]> = {
 
 // --- Soft totals A,2 (13) .. A,9 (20) ---------------------------------------
 // Row keys are the soft total. Ds = double else stand; D = double else hit.
-const SOFT: Record<number, CellCode[]> = {
+export const SOFT: Record<number, CellCode[]> = {
   13: ['H', 'H', 'H', 'D', 'D', 'H', 'H', 'H', 'H', 'H'], // A,2
   14: ['H', 'H', 'H', 'D', 'D', 'H', 'H', 'H', 'H', 'H'], // A,3
   15: ['H', 'H', 'D', 'D', 'D', 'H', 'H', 'H', 'H', 'H'], // A,4
@@ -74,7 +76,7 @@ const SOFT: Record<number, CellCode[]> = {
 // --- Pairs 2,2 .. A,A -------------------------------------------------------
 // Row keys are the pair's single-card blackjack value (A=11, ten=10).
 // Ph encodes the DAS-dependent splits (only split when DAS is on).
-const PAIRS: Record<number, CellCode[]> = {
+export const PAIRS: Record<number, CellCode[]> = {
   2:  ['Ph', 'Ph', 'P', 'P', 'P', 'P', 'H', 'H', 'H', 'H'], // 2,2
   3:  ['Ph', 'Ph', 'P', 'P', 'P', 'P', 'H', 'H', 'H', 'H'], // 3,3
   4:  ['H', 'H', 'H', 'Ph', 'Ph', 'H', 'H', 'H', 'H', 'H'], // 4,4
@@ -96,7 +98,7 @@ interface Opts {
 }
 
 /** Evaluate raw player total + softness without importing the hand module. */
-function rawValue(cards: Card[]): { total: number; soft: boolean } {
+export function rawValue(cards: Card[]): { total: number; soft: boolean } {
   let total = 0
   let aces = 0
   for (const c of cards) {
@@ -112,7 +114,7 @@ function rawValue(cards: Card[]): { total: number; soft: boolean } {
   return { total, soft: softAces > 0 }
 }
 
-function isPair(cards: Card[]): boolean {
+export function isPair(cards: Card[]): boolean {
   return cards.length === 2 && RANK_VALUE[cards[0].rank] === RANK_VALUE[cards[1].rank]
 }
 

@@ -29,6 +29,23 @@ export class Shoe {
     return card
   }
 
+  /**
+   * Draw the card nearest the top that matches `pred`, leaving the rest of
+   * the shoe order untouched (used by the hand-type training filter to rig
+   * the human's opening cards). Falls back to a normal draw when no undrawn
+   * card matches, so a depleted shape can never wedge the deal.
+   */
+  drawMatching(pred: (c: Card) => boolean): Card {
+    for (let i = this.cards.length - 1; i >= 0; i--) {
+      if (pred(this.cards[i])) {
+        const [card] = this.cards.splice(i, 1)
+        this.drawn++
+        return card
+      }
+    }
+    return this.draw()
+  }
+
   /** Undrawn cards left in the shoe. */
   get remaining(): number {
     return this.cards.length

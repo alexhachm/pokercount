@@ -91,6 +91,35 @@ export interface Settings {
   deviationRangeMin: number
   /** Highest index (true count) deviation you want to train, e.g. +6. */
   deviationRangeMax: number
+  /**
+   * Mix "false deviation" spots into the drill: hands that resemble index
+   * plays (same totals, tempting true counts) but have no Hi-Lo index, so
+   * basic strategy stays correct. Trains locating real indices, not just
+   * recognizing drilled spots. Also shuffles the drill order.
+   */
+  drillFalseSpots: boolean
+  /**
+   * Pacing multiplier applied to every dealing/bot/dealer delay in Play mode.
+   * 1 = normal; higher is slower (easier to follow), lower is faster (more
+   * reps). The store clamps to a sane range, so stale persisted values are
+   * harmless. Card fly-in animation length is unaffected.
+   */
+  dealSpeed: number
+  /**
+   * Show each hand's total under its cards (e.g. the "16" beneath 7♥ 9♥).
+   * Turn off to practice reading totals yourself.
+   */
+  showHandTotals: boolean
+  /**
+   * Hand-shape training filter, applied to YOUR hands only. In Play mode the
+   * opening deal rigs your two cards to an enabled shape (bots and the dealer
+   * draw naturally); in the deviation/TC drills only index plays of enabled
+   * kinds are queued. All three on = no filtering. All three off is treated
+   * as all-on so a stale persisted state can never mean "deal nothing".
+   */
+  trainHard: boolean
+  trainSoft: boolean
+  trainPairs: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -110,6 +139,12 @@ export const DEFAULT_SETTINGS: Settings = {
   deviationRangeEnabled: false,
   deviationRangeMin: -3,
   deviationRangeMax: 6,
+  drillFalseSpots: false,
+  dealSpeed: 1,
+  showHandTotals: true,
+  trainHard: true,
+  trainSoft: true,
+  trainPairs: true,
 }
 
 // --- Strategy contract ------------------------------------------------------
@@ -235,10 +270,18 @@ export interface DealerView {
 export type RoundPhase =
   | 'idle'
   | 'dealing'
+  /** Dealer shows an Ace: waiting on the human's insurance decision (pre-peek). */
+  | 'insurance'
   | 'playerTurn'
   | 'dealerTurn'
   | 'settle'
   | 'roundOver'
+
+/**
+ * The insurance decision expressed as a pseudo-action so mistake records can
+ * carry it through the same chosen/correct fields the Summary screen renders.
+ */
+export type InsuranceChoice = 'insurance' | 'no insurance'
 
 export interface MistakeRecord {
   id: string
@@ -247,15 +290,23 @@ export interface MistakeRecord {
   dealerUpcard: Card
   trueCount: number
   runningCount: number
-  chosen: Action
-  correct: Action
+  /** TC-drill answers are free-form labels (e.g. "stand at TC +3", "no deviation"). */
+  chosen: Action | InsuranceChoice | string
+  correct: Action | InsuranceChoice | string
   isDeviation: boolean
   reason: string
   /** Monotonic counter (not wall-clock) so it is deterministic in tests. */
   seq: number
 }
 
-export type GameMode = 'play' | 'drill'
+export type GameMode = 'play' | 'drill' | 'tcdrill'
+
+/** The bot action currently being announced on the table (badge over the hand). */
+export interface BotActionView {
+  seatIndex: number
+  handIndex: number
+  action: Action
+}
 
 // --- Drill mode -------------------------------------------------------------
 export interface DrillScenario {
@@ -271,6 +322,44 @@ export interface DrillScenario {
   correct: StrategyDecision
   /** Short prompt, e.g. "Hard 16 vs 10 — TC +1". */
   label: string
+}
+
+// --- TC drill mode ------------------------------------------------------------
+/**
+ * A TC-drill spot: the hand and upcard are shown WITHOUT a true count. The
+ * user must recall whether the spot has a Hi-Lo index at all, and if so type
+ * the boundary true count and pick the deviation action. Decoy spots (no
+ * index play exists) carry null deviation fields; "No deviation" is their
+ * correct answer.
+ */
+export interface TcDrillScenario {
+  id: string
+  /** Matched index play id, or 'none' for decoy spots. */
+  indexId: string
+  playerCards: Card[]
+  dealerUpcard: Card
+  /** Boundary true count at which the deviation applies; null for decoys. */
+  deviationIndex: number | null
+  /** 'gte' => deviate at TC >= index; 'lte' => at TC <= index; null for decoys. */
+  comparator: 'gte' | 'lte' | null
+  /** Action taken when the count triggers the play; null for decoys. */
+  deviationAction: Action | null
+  /** Basic-strategy action for the spot (what decoys resolve to). */
+  basicAction: Action
+  /** Feedback text, e.g. "16 v 10: stand at TC >= 0". */
+  reason: string
+  /** Short prompt WITHOUT the count, e.g. "Hard 16 vs 10". */
+  label: string
+}
+
+/** The user's answer to a TC-drill spot. */
+export interface TcDrillAnswer {
+  /** True = "this spot has an index play"; false = "no deviation exists". */
+  deviation: boolean
+  /** Typed integer boundary TC (required when deviation is true). */
+  tc?: number
+  /** Chosen deviation action (required when deviation is true). */
+  action?: Action
 }
 
 // ============================================================================
@@ -301,17 +390,36 @@ export interface GameStore {
   legalActions: Action[]
   /** Whether a session is active (vs. on the summary/home screen). */
   sessionActive: boolean
+  /** Bot action being announced right now (drives the table badge). */
+  botAction: BotActionView | null
 
   // --- play mode ---
   startPlayRound: () => void
   /** Apply an action to the active human hand. */
   act: (action: Action) => void
+  /**
+   * Whether the human took insurance this round; null until the dealer shows
+   * an Ace and the decision is made (and for all no-Ace rounds).
+   */
+  insuranceTaken: boolean | null
+  /** Settled insurance result in units (+1/box on dealer BJ, -0.5/box else). */
+  insuranceNet: number
+  /** Answer the insurance offer (phase 'insurance'); performs the peek. */
+  takeInsurance: (take: boolean) => void
 
   // --- drill mode ---
   drill: DrillScenario | null
   startDrillSession: () => void
   /** Advance to the next drill scenario. */
   nextDrill: () => void
+
+  // --- TC drill mode ---
+  tcDrill: TcDrillScenario | null
+  startTcDrillSession: () => void
+  /** Grade the typed-TC answer for the current TC-drill spot. */
+  answerTcDrill: (answer: TcDrillAnswer) => void
+  /** Advance to the next TC-drill scenario. */
+  nextTcDrill: () => void
 
   // --- common controls ---
   /** Reveal the correct move for the active hand (requires setting enabled). */
@@ -323,4 +431,5 @@ export interface GameStore {
 }
 
 // --- Navigation -------------------------------------------------------------
-export type Screen = 'home' | 'play' | 'drill' | 'settings' | 'summary'
+export type Screen =
+  | 'home' | 'play' | 'drill' | 'tcdrill' | 'settings' | 'summary' | 'charts'

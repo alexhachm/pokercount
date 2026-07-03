@@ -1,4 +1,5 @@
-import type { Action, HandOutcome, PlayerHandView, SeatView } from '@/types'
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import type { Action, HandOutcome, SeatView } from '@/types'
 import { useGame } from '@/store/gameStore'
 import { useSettings } from '@/store/settingsStore'
 import { useUi } from '@/store/uiStore'
@@ -6,7 +7,7 @@ import ShoeIndicator from '@/components/ShoeIndicator'
 import DiscardTray from '@/components/DiscardTray'
 import CountDisplay from '@/components/CountDisplay'
 import DealerArea from '@/components/DealerArea'
-import HandView from '@/components/HandView'
+import TableArc from '@/components/TableArc'
 import HintBanner from '@/components/HintBanner'
 import ActionBar from '@/components/ActionBar'
 
@@ -41,7 +42,7 @@ function ToggleChip({
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`select-none rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
+      className={`min-h-[44px] select-none rounded-full px-4 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
         on
           ? 'bg-emerald-500 text-emerald-950'
           : 'bg-slate-800 text-slate-300 ring-1 ring-slate-600'
@@ -49,6 +50,128 @@ function ToggleChip({
     >
       {label}
     </button>
+  )
+}
+
+/**
+ * The seat row in table setup. The "You" tile is draggable: pick it up and
+ * drop it on any spot to take that seat (pointer events, so it works with
+ * touch on the iPhone PWA where HTML5 drag-and-drop does not). Tapping a
+ * spot still moves there directly.
+ */
+function SeatPicker({
+  seatCount,
+  effectiveSeat,
+  onPick,
+}: {
+  seatCount: number
+  effectiveSeat: number
+  onPick: (pos: number) => void
+}) {
+  const rowRef = useRef<HTMLDivElement>(null)
+  const startPoint = useRef<{ x: number; y: number } | null>(null)
+  const [drag, setDrag] = useState<{ dx: number; dy: number; over: number | null; moved: boolean } | null>(
+    null,
+  )
+
+  /** The seat tile under the pointer, ignoring the tile being dragged. */
+  const slotFromPoint = (clientX: number, clientY: number, dragging: boolean): number | null => {
+    const row = rowRef.current
+    if (!row) return null
+    const tiles = Array.from(row.children) as HTMLElement[]
+    for (let i = 0; i < tiles.length; i++) {
+      if (dragging && i === effectiveSeat) continue // its rect follows the finger
+      const r = tiles[i].getBoundingClientRect()
+      // A little vertical slack so a wobbly finger doesn't drop the seat.
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top - 24 && clientY <= r.bottom + 24) {
+        return i
+      }
+    }
+    return null
+  }
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    startPoint.current = { x: e.clientX, y: e.clientY }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDrag({ dx: 0, dy: 0, over: null, moved: false })
+  }
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const start = startPoint.current
+    if (!start) return
+    const dx = e.clientX - start.x
+    const dy = e.clientY - start.y
+    const { clientX, clientY } = e
+    setDrag((d) => {
+      if (!d) return d
+      const moved = d.moved || Math.hypot(dx, dy) > 6
+      return { dx, dy, over: moved ? slotFromPoint(clientX, clientY, true) : null, moved }
+    })
+  }
+
+  const onPointerEnd = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!startPoint.current) return
+    const target = drag?.moved ? slotFromPoint(e.clientX, e.clientY, true) : null
+    startPoint.current = null
+    setDrag(null)
+    if (target !== null && target !== effectiveSeat) onPick(target)
+  }
+
+  const onPointerCancel = () => {
+    startPoint.current = null
+    setDrag(null)
+  }
+
+  return (
+    <div ref={rowRef} className="flex flex-wrap gap-2">
+      {Array.from({ length: seatCount }).map((_, pos) => {
+        const isYou = pos === effectiveSeat
+        const isDropTarget = drag?.moved && drag.over === pos && !isYou
+        if (isYou) {
+          return (
+            <button
+              key={pos}
+              type="button"
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerEnd}
+              onPointerCancel={onPointerCancel}
+              aria-label="Drag to change your seat"
+              className={`flex h-14 w-14 flex-col items-center justify-center rounded-lg text-[10px] font-bold uppercase tracking-wide bg-emerald-500 text-emerald-950 ring-2 ring-emerald-300 ${
+                drag?.moved ? 'cursor-grabbing shadow-xl' : 'cursor-grab'
+              }`}
+              style={{
+                touchAction: 'none', // the drag owns the gesture; no page scroll
+                transform: drag?.moved
+                  ? `translate(${drag.dx}px, ${drag.dy}px) scale(1.12)`
+                  : undefined,
+                transition: drag?.moved ? 'none' : 'transform 150ms ease',
+                zIndex: drag?.moved ? 10 : undefined,
+                position: 'relative',
+              }}
+            >
+              <span className="text-base">🧑</span>
+              You
+            </button>
+          )
+        }
+        return (
+          <button
+            key={pos}
+            type="button"
+            onClick={() => onPick(pos)}
+            className={`flex h-14 w-14 flex-col items-center justify-center rounded-lg text-[10px] font-bold uppercase tracking-wide transition-colors ${
+              isDropTarget
+                ? 'bg-emerald-900/70 text-emerald-200 ring-2 ring-dashed ring-emerald-300'
+                : 'bg-slate-700 text-slate-300'
+            }`}
+          >
+            <span className="text-base">🤖</span>
+            {isDropTarget ? 'Here' : 'Bot'}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -71,7 +194,7 @@ function MiniStepper({
         type="button"
         disabled={value <= min}
         onClick={() => onChange(clamp(value - 1))}
-        className="h-9 w-9 rounded-lg bg-slate-700 text-xl font-bold text-white disabled:opacity-30"
+        className="h-11 w-11 rounded-lg bg-slate-700 text-xl font-bold text-white disabled:opacity-30"
       >
         −
       </button>
@@ -82,7 +205,7 @@ function MiniStepper({
         type="button"
         disabled={value >= max}
         onClick={() => onChange(clamp(value + 1))}
-        className="h-9 w-9 rounded-lg bg-slate-700 text-xl font-bold text-white disabled:opacity-30"
+        className="h-11 w-11 rounded-lg bg-slate-700 text-xl font-bold text-white disabled:opacity-30"
       >
         +
       </button>
@@ -115,8 +238,13 @@ export default function PlayScreen() {
   const displayTrueCount = useGame((s) => s.displayTrueCount)
   const hint = useGame((s) => s.hint)
   const legalActions = useGame((s) => s.legalActions)
+  const botAction = useGame((s) => s.botAction)
+
+  const insuranceTaken = useGame((s) => s.insuranceTaken)
+  const insuranceNet = useGame((s) => s.insuranceNet)
 
   const act = useGame((s) => s.act)
+  const takeInsurance = useGame((s) => s.takeInsurance)
   const revealHint = useGame((s) => s.revealHint)
   const startPlayRound = useGame((s) => s.startPlayRound)
   const endSession = useGame((s) => s.endSession)
@@ -168,29 +296,14 @@ export default function PlayScreen() {
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
             Your seat (dealt left to right)
           </span>
-          <div className="flex flex-wrap gap-2">
-            {Array.from({ length: seatCount }).map((_, pos) => {
-              const selected = pos === effectiveSeat
-              return (
-                <button
-                  key={pos}
-                  type="button"
-                  onClick={() => setSetting('humanSeatPosition', pos)}
-                  className={`flex h-14 w-14 flex-col items-center justify-center rounded-lg text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                    selected
-                      ? 'bg-emerald-500 text-emerald-950 ring-2 ring-emerald-300'
-                      : 'bg-slate-700 text-slate-300'
-                  }`}
-                >
-                  <span className="text-base">{selected ? '🧑' : '🤖'}</span>
-                  {selected ? 'You' : 'Bot'}
-                </button>
-              )
-            })}
-          </div>
+          <SeatPicker
+            seatCount={seatCount}
+            effectiveSeat={effectiveSeat}
+            onPick={(pos) => setSetting('humanSeatPosition', pos)}
+          />
           <span className="text-[11px] text-slate-500">
-            Seat {effectiveSeat + 1} of {seatCount} — later seats act after more
-            cards are seen.
+            Seat {effectiveSeat + 1} of {seatCount} — drag your seat (or tap a
+            spot). Later seats act after more cards are seen.
           </span>
         </section>
 
@@ -257,12 +370,18 @@ export default function PlayScreen() {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '100vh',
+        // Bounded height (body already owns the safe-area insets) so overflow
+        // scrolling stays inside this screen instead of the document.
+        height: '100%',
         gap: 12,
-        padding:
-          'max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom))',
+        padding: 12,
         boxSizing: 'border-box',
         overflowY: 'auto',
+        // Edge arc boxes may poke past the sides; never let that widen the
+        // screen into a horizontal pan.
+        overflowX: 'hidden',
+        overscrollBehavior: 'contain',
+        WebkitOverflowScrolling: 'touch',
       }}
     >
       {/* Top bar: discard tray (top-left) + shoe + count pills + end. */}
@@ -298,6 +417,7 @@ export default function PlayScreen() {
               onClick={handleEnd}
               style={{
                 padding: '8px 16px',
+                minHeight: 44,
                 borderRadius: 8,
                 border: '1px solid rgba(255,255,255,0.25)',
                 background: 'rgba(0,0,0,0.25)',
@@ -311,7 +431,7 @@ export default function PlayScreen() {
           </div>
 
           {/* Quick visibility toggles — surfaced in play, not buried in settings. */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <ToggleChip
               label="RC"
               on={showRunningCount}
@@ -331,39 +451,88 @@ export default function PlayScreen() {
         </div>
       </header>
 
-      <DealerArea dealer={dealer} />
-
+      {/* The table proper: dealer up top, betting boxes on a semicircle. */}
       <section
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 16,
+          gap: 8,
           flex: '1 1 auto',
         }}
       >
-        {seats.map((seat) => (
-          <div key={seat.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 12,
-                alignItems: 'flex-start',
-              }}
-            >
-              {seat.hands.map((hand: PlayerHandView) => (
-                <HandView
-                  key={hand.id}
-                  hand={hand}
-                  label={seat.hands.length > 1 ? `${seat.label} ·` : seat.label}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+        <DealerArea dealer={dealer} placeholder={phase !== 'dealing'} />
+        <TableArc
+          seats={seats}
+          botAction={botAction}
+          // Spread mid-hand: the + button adds a box dealt from the next round.
+          canAddHand={
+            (phase === 'dealing' || phase === 'playerTurn' || phase === 'dealerTurn') &&
+            numHands < 5
+          }
+          onAddHand={() => setSetting('numHands', Math.min(5, numHands + 1))}
+          nextRoundHands={numHands}
+        />
       </section>
 
       <HintBanner hint={hint} canShow={canShowHint} revealed={revealed} onShow={revealHint} />
+
+      {/* Insurance offer: dealer shows an Ace, decision comes before the peek.
+          The count pills above stay live, so this is a pure counting read. */}
+      {phase === 'insurance' && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            padding: 12,
+            borderRadius: 12,
+            background: 'rgba(0,0,0,0.25)',
+            border: '1px solid rgba(225, 177, 44, 0.45)', // chip-gold accent
+          }}
+        >
+          <span style={{ color: '#fff', fontWeight: 700, textAlign: 'center' }}>
+            Dealer shows an Ace — insurance?
+          </span>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => takeInsurance(true)}
+              style={{
+                flex: 1,
+                minHeight: 48,
+                borderRadius: 10,
+                border: 'none',
+                background: '#e1b12c',
+                color: '#1c1917',
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: 'pointer',
+                touchAction: 'manipulation',
+              }}
+            >
+              Take insurance
+            </button>
+            <button
+              type="button"
+              onClick={() => takeInsurance(false)}
+              style={{
+                flex: 1,
+                minHeight: 48,
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.35)',
+                background: 'rgba(0,0,0,0.25)',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: 'pointer',
+                touchAction: 'manipulation',
+              }}
+            >
+              No insurance
+            </button>
+          </div>
+        </div>
+      )}
 
       {phase === 'roundOver' && (
         <div
@@ -404,6 +573,31 @@ export default function PlayScreen() {
                   </span>
                 </div>
               )),
+            )}
+            {/* Insurance settles separately from the hand results. */}
+            {insuranceTaken && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  fontVariantNumeric: 'tabular-nums',
+                  color: '#fff',
+                }}
+              >
+                <span style={{ opacity: 0.85 }}>Insurance</span>
+                <span style={{ fontWeight: 600 }}>{insuranceNet > 0 ? 'WIN' : 'LOSE'}</span>
+                <span
+                  style={{
+                    fontWeight: 700,
+                    color: insuranceNet > 0 ? '#34d399' : '#f87171',
+                    minWidth: 56,
+                    textAlign: 'right',
+                  }}
+                >
+                  {formatNet(insuranceNet)}
+                </span>
+              </div>
             )}
           </div>
 

@@ -1,6 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  future: {
+    // hover: variants only apply on devices with real hover support, so
+    // taps on iOS never leave buttons stuck in their hover state.
+    hoverOnlyWhenSupported: true,
+  },
   theme: {
     extend: {
       colors: {

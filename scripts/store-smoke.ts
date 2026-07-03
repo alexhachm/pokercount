@@ -42,9 +42,16 @@ useSettings.setState({
   showTrueCount: true,
 })
 
+// With an Ace up the deal parks on the insurance offer; decline it so the
+// generic round-driving assertions below see playerTurn/roundOver as before.
+const declineInsurance = () => {
+  if (S().phase === 'insurance') S().takeInsurance(false)
+}
+
 // =================== PLAY MODE ===================
 S().resetSession()
 S().startPlayRound()
+declineInsurance()
 ok('play: 3 seats (2 bots + human)', S().seats.length === 3, S().seats.length)
 const human = S().seats[S().humanSeatIndex]
 ok('play: human is last seat', S().humanSeatIndex === 2, S().humanSeatIndex)
@@ -72,6 +79,7 @@ ok('play: decksRemaining < 6 after dealing', S().count.decksRemaining < 6, S().c
 // next round keeps the session (mistakes persist)
 const decisionsAfterR1 = S().decisionsCount
 S().startPlayRound()
+declineInsurance()
 ok('play: next round keeps session active', S().sessionActive === true)
 ok('play: decisions carried over', S().decisionsCount >= decisionsAfterR1, S().decisionsCount)
 // finish round 2
@@ -148,6 +156,7 @@ let resolvedAll = true
 let countAlwaysFinite = true
 for (let r = 0; r < 80; r++) {
   S().startPlayRound()
+  declineInsurance()
   let g = 0
   while (S().phase === 'playerTurn' && g++ < 60) S().act('stand')
   if (S().phase !== 'roundOver') resolvedAll = false
@@ -177,6 +186,7 @@ let sawPairBox = false
 let pairAlwaysSplittable = true
 for (let r = 0; r < 60; r++) {
   S().startPlayRound()
+  declineInsurance()
   let g = 0
   while (S().phase === 'playerTurn' && g++ < 60) {
     const hseat = S().seats[S().humanSeatIndex]
@@ -191,6 +201,58 @@ for (let r = 0; r < 60; r++) {
 Math.random = _origRandom2
 ok('perbox: saw a pair on a box with numHands=4', sawPairBox)
 ok('perbox: pair on a box is always splittable (per-box cap)', pairAlwaysSplittable)
+
+// =================== INSURANCE ===================
+// An Ace up must park the round in the insurance phase before the peek. Answer
+// deliberately WRONG each time to exercise grading, mistake recording, and the
+// side-bet settlement in one pass.
+S().resetSession()
+useSettings.setState({
+  numOtherPlayers: 0,
+  numHands: 1,
+  humanSeatPosition: 99,
+  decks: 6,
+  surrenderEnabled: false,
+  deviationRangeEnabled: false,
+})
+const _origRandom3 = Math.random
+let _seed3 = 1357911
+Math.random = () => {
+  _seed3 = (_seed3 * 1103515245 + 12345) & 0x7fffffff
+  return _seed3 / 0x7fffffff
+}
+let insOffers = 0
+let insAceUp = true
+let insRoundsResolve = true
+let insGradeOk = true
+let insNetOk = true
+for (let r = 0; r < 150 && insOffers < 5; r++) {
+  S().startPlayRound()
+  if (S().phase === 'insurance') {
+    insOffers++
+    if (S().dealer.upcard?.rank !== 'A') insAceUp = false
+    const decisionsBefore = S().decisionsCount
+    const mistakesBefore = S().mistakes.length
+    const shouldTake = S().count.trueCount >= 3
+    S().takeInsurance(!shouldTake) // wrong on purpose
+    if (S().decisionsCount !== decisionsBefore + 1) insGradeOk = false
+    if (S().mistakes.length !== mistakesBefore + 1) insGradeOk = false
+    if (!shouldTake) {
+      // We took it against the count: one box pays +1 on dealer BJ, else -0.5.
+      const n = S().insuranceNet
+      if (n !== 1 && n !== -0.5) insNetOk = false
+    }
+  }
+  let g = 0
+  while (S().phase === 'playerTurn' && g++ < 60) S().act('stand')
+  if (S().phase !== 'roundOver') insRoundsResolve = false
+}
+Math.random = _origRandom3
+ok('insurance: offered at least once across the run', insOffers >= 1, insOffers)
+ok('insurance: only offered with an ace up', insAceUp)
+ok('insurance: rounds still resolve to roundOver', insRoundsResolve)
+ok('insurance: graded as a decision (mistake on wrong answer)', insGradeOk)
+ok('insurance: side bet settles to +1 or -0.5 per box', insNetOk)
 
 console.log(`\n${pass} passed, ${fail} failed`)
 if (fail > 0) process.exit(1)

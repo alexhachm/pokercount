@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Action, DealerView, PlayerHandView } from '@/types'
 import { RANK_VALUE } from '@/types'
 import { evaluate } from '@/engine/hand'
@@ -42,6 +42,17 @@ export default function DrillScreen() {
     drillId: string
   } | null>(null)
   const [hintRevealed, setHintRevealed] = useState(false)
+
+  // Debounce the swapped-in Next button: it mounts in the same screen region as
+  // the ActionBar, so a fast double-tap on Hit/Stand would otherwise land its
+  // second tap on Next and skip the correct/incorrect feedback.
+  const [nextReady, setNextReady] = useState(false)
+  useEffect(() => {
+    setNextReady(false)
+    if (acted === null) return
+    const t = setTimeout(() => setNextReady(true), 300)
+    return () => clearTimeout(t)
+  }, [acted])
 
   // The drill changes identity on nextDrill(); reset per-spot UI when it does.
   const drillId = drill?.id ?? null
@@ -144,7 +155,7 @@ export default function DrillScreen() {
           showTrue
         />
         <button
-          className="rounded-lg bg-neutral-800 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/15"
+          className="min-h-[44px] min-w-[44px] rounded-lg bg-neutral-800 px-4 text-xs font-semibold text-white ring-1 ring-white/15"
           onClick={() => {
             endSession()
             go('summary')
@@ -162,7 +173,7 @@ export default function DrillScreen() {
       {/* Table: dealer upcard above, player hand below. */}
       <div className="flex flex-1 flex-col items-center justify-center gap-6">
         <DealerArea dealer={dealerView} />
-        <HandView hand={playerView} label="You" />
+        <HandView hand={playerView} label="You" staggered />
       </div>
 
       {/* Hint (only offered when the setting is on and before acting). */}
@@ -189,7 +200,8 @@ export default function DrillScreen() {
             </span>
           </div>
           <button
-            className="w-full rounded-xl bg-emerald-500 py-3 text-base font-bold text-emerald-950"
+            className="w-full rounded-xl bg-emerald-500 py-3 text-base font-bold text-emerald-950 disabled:opacity-40"
+            disabled={!nextReady}
             onClick={nextDrill}
           >
             Next

@@ -21,17 +21,26 @@ export default function ActionBar({ legal, onAction, disabled = false }: ActionB
   const actions = ACTION_ORDER.filter((a) => legal.includes(a))
   if (actions.length === 0) return null
 
+  // Narrow iPhones (375px) can't fit five equal-width buttons: shrink labels at
+  // 4+ actions and wrap Surrender onto its own row (below the main actions)
+  // when all five are legal. Wider screens keep the single five-across row.
+  const sizeClasses = actions.length >= 4 ? 'px-1 text-sm' : 'px-2 text-base'
+
   return (
-    <div className="flex w-full gap-2">
+    <div className="flex w-full flex-wrap gap-2">
       {actions.map((action) => {
         const meta = ACTION_META[action]
+        const basisFull =
+          actions.length === 5 && action === 'surrender'
+            ? 'max-[479px]:order-last max-[479px]:basis-full'
+            : ''
         return (
           <button
             key={action}
             type="button"
             disabled={disabled}
             onClick={() => onAction(action)}
-            className={`flex-1 select-none rounded-xl px-2 py-4 text-base font-bold uppercase tracking-wide text-white shadow-md transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${meta.classes}`}
+            className={`min-w-0 flex-1 touch-manipulation select-none rounded-xl py-4 font-bold uppercase tracking-wide text-white shadow-md transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${sizeClasses} ${basisFull} ${meta.classes}`}
           >
             {meta.label}
           </button>

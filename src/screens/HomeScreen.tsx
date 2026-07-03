@@ -27,6 +27,13 @@ export default function HomeScreen() {
     useUi.getState().go('drill')
   }
 
+  const handleTcDrill = () => {
+    useGame.getState().startTcDrillSession()
+    useUi.getState().go('tcdrill')
+  }
+
+  const handleCharts = () => useUi.getState().go('charts')
+
   const handleSettings = () => useUi.getState().go('settings')
 
   const countVisibility =
@@ -48,18 +55,24 @@ export default function HomeScreen() {
   return (
     <div
       style={{
-        minHeight: '100dvh',
+        // Fill #root (which already equals the viewport minus the safe-area
+        // insets applied as body padding) instead of 100dvh, which would
+        // double-count the insets and make this static screen scrollable.
+        minHeight: '100%',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
         gap: 32,
         padding: '32px 20px',
         boxSizing: 'border-box',
         textAlign: 'center',
       }}
     >
-      <header style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Auto margins on the first/last children center the content when it
+          fits, but fall back to top-aligned scrollable layout when it does
+          not (e.g. landscape iPhones), unlike justify-content: center which
+          clips the top overflow. */}
+      <header style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto' }}>
         <h1
           style={{
             margin: 0,
@@ -93,6 +106,12 @@ export default function HomeScreen() {
         <button type="button" onClick={handleDrill} style={primaryButton('#1d4ed8')}>
           Deviation Drill
         </button>
+        <button type="button" onClick={handleTcDrill} style={primaryButton('#0e7490')}>
+          TC Drill
+        </button>
+        <button type="button" onClick={handleCharts} style={primaryButton('#6d28d9')}>
+          Charts
+        </button>
         <button type="button" onClick={handleSettings} style={secondaryButton}>
           Settings
         </button>
@@ -105,6 +124,7 @@ export default function HomeScreen() {
           justifyContent: 'center',
           gap: 8,
           maxWidth: 360,
+          marginBottom: 'auto',
         }}
       >
         {summary.map((chip) => (
