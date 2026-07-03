@@ -1,0 +1,1808 @@
+{
+  "schemaVersion": "1.0.0",
+  "title": "Hi-Lo Blackjack Deviation Index (game-type parameterized)",
+  "description": "Deeply-researched, cross-source-verified index of Hi-Lo (High-Low) card-counting deviations from basic strategy, spanning game types. Each record is a superset of the app IndexPlay contract (src/types/index.ts): same id/kind/total/pairRank/upcard/comparator/action/basicAction fields, extended with per-ruleset index values (indexS17/indexH17) and rule/deck gating so a builder can project it onto any game type.",
+  "generatedBy": "multi-agent deep-research workflow (deviations-index-research); 12 agents, cross-checked vs Schlesinger Blackjack Attack 3e, Wong Professional Blackjack, Wizard of Odds, Blackjack Apprenticeship",
+  "countSystem": "HiLo",
+  "baseline": {
+    "decks": 6,
+    "ruleset": "S17",
+    "das": true,
+    "surrender": "late",
+    "pivot": 0,
+    "insuranceIndex": 3,
+    "note": "All indexS17/indexH17 values are balanced Hi-Lo TRUE-COUNT boundaries at this baseline. True-count indices are deck-count independent for 4/6/8-deck shoes (see gameTypeNotes for the SD/DD caveat)."
+  },
+  "fieldSchema": {
+    "id": "string — stable id, app convention: hard<total>v<up>, soft<total>v<up>, pair<rank>v<up>, surr<total>v<up>, 'insurance'. Upcard 11 = Ace; ten pair rank = '10'.",
+    "kind": "'hard' | 'soft' | 'pair' | 'insurance'",
+    "spot": "string — human-readable label, e.g. \"16 v 10\", \"A,7 v 2\".",
+    "dealerUpcard": "number 2..10, 11 for Ace; null for insurance.",
+    "playerTotal": "number — hard/soft total; null for pair/insurance.",
+    "pairRank": "string pair rank ('2'..'9','10','A'); null otherwise.",
+    "action": "action taken WHEN the deviation triggers ('hit'|'stand'|'double'|'split'|'surrender').",
+    "basicAction": "basic-strategy action when it does NOT trigger (the non-triggering fallback). Matches the multi-deck S17 basic chart.",
+    "comparator": "'gte' => deviate when trueCount >= index (rich-deck plays AND lower-bound stiff-stands with negative index); 'lte' => deviate when trueCount <= index (poor-deck plays only). NOTE: 13v2/13v3/12v5/12v6 are 'gte' with a negative index (stand at/above, hit below) — NOT lte.",
+    "indexS17": "integer boundary true count under Dealer-Stands-Soft-17; null when the play does not exist under S17.",
+    "indexH17": "integer boundary true count under Dealer-Hits-Soft-17; equals indexS17 for the majority of plays; null when the play is basic strategy (no deviation) or does not exist under H17.",
+    "tags": "array — set membership: 'illustrious18' | 'fab4' | 'catch22' | 'extended' | 'insurance'.",
+    "requiresDAS": "boolean — true if the play only holds when Double-After-Split is offered (low-pair splits only).",
+    "requiresSurrender": "boolean — true if the play needs late surrender offered (all surrender lines).",
+    "deckScope": "'all' (deck-count independent true-count index) | 'single' | 'double' | 'multi'.",
+    "confidence": "'high' | 'medium' | 'low' — source agreement strength.",
+    "sources": "array of named authoritative sources supporting the value(s).",
+    "notes": "string — source disagreement, rounding, encoding, or ruleset caveats."
+  },
+  "tagLegend": {
+    "illustrious18": "Don Schlesinger's Illustrious 18 — the 18 highest-EV Hi-Lo deviations plus insurance.",
+    "fab4": "The Fab 4 late-surrender deviations (14v10, 15v10, 15v9, 15vA).",
+    "catch22": "Members of the commonly-cited extended \"Catch 22\" index set.",
+    "extended": "Extended / fuller Hi-Lo index beyond the core sets; lower reach/EV.",
+    "insurance": "The insurance / even-money decision (kind: insurance)."
+  },
+  "wiring": {
+    "appContract": "src/types/index.ts -> IndexPlay; consumed by src/engine/deviations.ts (INDEX_PLAYS), strategy.ts, drillEngine.ts, chartSpots.ts.",
+    "projection": "To produce the app's S17 INDEX_PLAYS array: filter this.deviations where indexS17 !== null, and for the S17 ruleset map each record to IndexPlay as { id, kind, total: playerTotal ?? undefined, pairRank: pairRank ?? undefined, upcard: dealerUpcard ?? undefined, index: indexS17, comparator, action, basicAction, description: notes-or-spot }. For H17, use indexH17 and drop records where indexH17 === null. Respect requiresSurrender/requiresDAS against Settings.surrenderEnabled/dasEnabled, and honor deviationRange as today.",
+    "uniqueness": "The app keys findIndexPlay() uniquely on (kind, total/pairRank, upcard) and takes the FIRST match. This data set intentionally records BOTH a stand line and a surrender line for the same spot (e.g. hard15v10 + surr15v10, hard16v9 + surr16v9). When building the flat INDEX_PLAYS, pick ONE per (kind,total/pairRank,upcard) per the app's existing rule (surrender line canonical when surrender is on; otherwise the stand line) — do not emit both into the flat array.",
+    "caution": "Entries with confidence:\"low\" (single-source or uncorroborated, several tagged as removal candidates in notes) and the deep-negative surrender floors are for completeness; gate them behind a review before drilling users on them."
+  },
+  "counts": {
+    "total": 66,
+    "byKind": {
+      "insurance": 1,
+      "hard": 40,
+      "pair": 11,
+      "soft": 14
+    },
+    "byTag": {
+      "illustrious18": 18,
+      "insurance": 1,
+      "fab4": 4,
+      "extended": 44,
+      "catch22": 1
+    },
+    "byConfidence": {
+      "high": 17,
+      "medium": 18,
+      "low": 31
+    },
+    "unresolved": 9
+  },
+  "gameTypeNotes": "Baseline is 6-deck S17 DAS LS, balanced Hi-Lo, pivot TC 0, insurance +3. RULES drive the indices, not deck count. S17 vs H17: most of the I18 is identical across both (insurance +3, 16v10 0, 15v10 +4, 16v9 +4/+5, 12v2 +3, 12v3 +2, 12v4 0, 12v5 -2, 12v6 -1, 13v2 -1, 13v3 -2, 9v2 +1, 9v7 +3, 10v10 +4, TTv5 +5, TTv6 +4 all unchanged). Only about seven spots shift under H17: 11vA (S17 +1 double becomes basic-strategy double under H17 -> indexH17 null); 10vA (+4 -> +3); 16vA stand (impractical/none under S17 -> +3 under H17); 15vA stand (none under S17 -> +5 under H17); 15vA surrender (S17 +1/+2 -> H17 -1); A,8 v6 double (S17 +1 gte -> basic double under H17); and 17vA becomes a basic-strategy surrender under H17 (always, not a count deviation, so not tabulated here). DECK COUNT: one shared true-count table is correct for 4/6/8 decks because dividing running count by decks-remaining normalizes card density; insurance is +3 in every deck count. Single/double deck can differ by a point on some 12/16 and split plays (larger composition effects) and practitioners often run running-count indices there, so SD/DD warrants a separate RC-index mode. DAS gates low-pair splits only (6,6 v2; 4,4 v5/v6; 3,3 v2/v3; 2,2 v2/v3): with DAS they split at lower/negative counts, without DAS the index rises or the split disappears; tens-splits, 9,9, 8,8 and A,A are DAS-independent. LS gates all surrenders (Fab 4 plus the extended surrenders); with no surrender each falls back to its hard-total hit/stand line; 16v9/16v10/16vA are basic-strategy surrenders when LS is on, and 17vA is a basic surrender only under H17. CONVENTIONS: floored Schlesinger integers are canonical; every stiff-stand and every rich-deck double/split/surrender/insurance is encoded gte, including the negative-index lower-bound stands (13v2 -1, 13v3 -2, 12v5 -2, 12v6 -1) which are stand-at/above, hit-below and must NOT be mislabeled lte; the single genuine lte no-double case is A,8 v6 under H17 (basic doubles, stop doubling at deep-negative counts).",
+  "deviations": [
+    {
+      "id": "insurance",
+      "kind": "insurance",
+      "spot": "insurance",
+      "dealerUpcard": null,
+      "playerTotal": null,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 3,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18",
+        "insurance"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #1. Take insurance/even-money at TC>=+3; deck- and rule-independent. action/basicAction are placeholders; app keys off kind='insurance'."
+    },
+    {
+      "id": "hard16v10",
+      "kind": "hard",
+      "spot": "16 v 10",
+      "dealerUpcard": 10,
+      "playerTotal": 16,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 0,
+      "indexH17": 0,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #2 (Big 3). Basic hits; stand at TC>=0. S17=H17."
+    },
+    {
+      "id": "hard15v10",
+      "kind": "hard",
+      "spot": "15 v 10",
+      "dealerUpcard": 10,
+      "playerTotal": 15,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 4,
+      "indexH17": 4,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #3 (Big 3). Stand at TC>=+4. Distinct from the Fab 4 surrender 15v10 line (surr15v10). S17=H17."
+    },
+    {
+      "id": "pair10v5",
+      "kind": "pair",
+      "spot": "10,10 v 5",
+      "dealerUpcard": 5,
+      "playerTotal": null,
+      "pairRank": "10",
+      "action": "split",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 5,
+      "indexH17": 5,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #4. Basic stands the 20; split tens at TC>=+5. Not DAS-dependent. High casino heat. S17=H17."
+    },
+    {
+      "id": "pair10v6",
+      "kind": "pair",
+      "spot": "10,10 v 6",
+      "dealerUpcard": 6,
+      "playerTotal": null,
+      "pairRank": "10",
+      "action": "split",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 4,
+      "indexH17": 4,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #5. Split tens at TC>=+4. Report lists TTv6 among unchanged S17/H17 hands; a minority put H17 ~+3. Kept +4/+4. Not DAS-dependent."
+    },
+    {
+      "id": "hard10v10",
+      "kind": "hard",
+      "spot": "10 v 10",
+      "dealerUpcard": 10,
+      "playerTotal": 10,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 4,
+      "indexH17": 4,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #6. Hard 10 vs 10; double at TC>=+4. S17=H17."
+    },
+    {
+      "id": "hard12v3",
+      "kind": "hard",
+      "spot": "12 v 3",
+      "dealerUpcard": 3,
+      "playerTotal": 12,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 2,
+      "indexH17": 2,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #7. Basic hits 12v3; stand at TC>=+2. S17=H17."
+    },
+    {
+      "id": "hard12v2",
+      "kind": "hard",
+      "spot": "12 v 2",
+      "dealerUpcard": 2,
+      "playerTotal": 12,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 3,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #8. Basic hits 12v2; stand at TC>=+3. S17=H17."
+    },
+    {
+      "id": "hard11vA",
+      "kind": "hard",
+      "spot": "11 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 11,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 1,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wizard of Odds",
+        "Blackjack Apprenticeship",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #9. S17: basic hits, double at TC>=+1 (Wizard/Schlesinger, high confidence). H17: 11vA is basic-strategy double, so no deviation exists -> indexH17 null per the game-type report (researchers had variously encoded 0 or -1 as 'always double')."
+    },
+    {
+      "id": "hard9v2",
+      "kind": "hard",
+      "spot": "9 v 2",
+      "dealerUpcard": 2,
+      "playerTotal": 9,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 1,
+      "indexH17": 1,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #10. Double at TC>=+1. GameMaster's +2 is a minority; kept canonical +1. Dealer 2 barely touched by soft-17 rule; S17=H17."
+    },
+    {
+      "id": "hard10vA",
+      "kind": "hard",
+      "spot": "10 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 10,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 4,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #11. Genuine S17/H17 split: double at TC>=+4 (S17), TC>=+3 (H17, dealer ace stronger). Both corroborated."
+    },
+    {
+      "id": "hard9v7",
+      "kind": "hard",
+      "spot": "9 v 7",
+      "dealerUpcard": 7,
+      "playerTotal": 9,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 3,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #12. Double at TC>=+3. S17=H17."
+    },
+    {
+      "id": "hard16v9",
+      "kind": "hard",
+      "spot": "16 v 9",
+      "dealerUpcard": 9,
+      "playerTotal": 16,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 5,
+      "indexH17": 5,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #13. Stand at TC>=+5 (Schlesinger/Wong/Wizard/gamblingcalc majority). Blackjack Apprenticeship floored charts round to +4 (see unresolved). S17=H17."
+    },
+    {
+      "id": "hard13v2",
+      "kind": "hard",
+      "spot": "13 v 2",
+      "dealerUpcard": 2,
+      "playerTotal": 13,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": -1,
+      "indexH17": -1,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #14. Lower-bound stand: gte with negative index -> STAND at TC>=-1, HIT at TC<=-2. basicAction='hit' is the below-index (non-triggering) action per engine convention; do not 'fix' to stand. S17=H17."
+    },
+    {
+      "id": "hard12v4",
+      "kind": "hard",
+      "spot": "12 v 4",
+      "dealerUpcard": 4,
+      "playerTotal": 12,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 0,
+      "indexH17": 0,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #15. Lower-bound stand, gte 0: STAND at TC>=0, HIT below. S17=H17."
+    },
+    {
+      "id": "hard12v5",
+      "kind": "hard",
+      "spot": "12 v 5",
+      "dealerUpcard": 5,
+      "playerTotal": 12,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": -2,
+      "indexH17": -2,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #16. Lower-bound stand, gte -2: STAND at TC>=-2, HIT below. BJA practical charts omit it. S17=H17."
+    },
+    {
+      "id": "hard12v6",
+      "kind": "hard",
+      "spot": "12 v 6",
+      "dealerUpcard": 6,
+      "playerTotal": 12,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": -1,
+      "indexH17": -1,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #17. Lower-bound stand, gte -1: STAND at TC>=-1, HIT below. indexH17 set to -1 per the game-type report, which lists 12v6 among UNCHANGED S17/H17 hands; one researcher had argued a drop to -3 (see unresolved)."
+    },
+    {
+      "id": "hard13v3",
+      "kind": "hard",
+      "spot": "13 v 3",
+      "dealerUpcard": 3,
+      "playerTotal": 13,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": -2,
+      "indexH17": -2,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "illustrious18"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Wong Professional Blackjack",
+        "Wizard of Odds",
+        "gamblingcalc"
+      ],
+      "notes": "I18 #18 (lowest EV). Lower-bound stand, gte -2: STAND at TC>=-2, HIT below. S17=H17."
+    },
+    {
+      "id": "surr14v10",
+      "kind": "hard",
+      "spot": "14 v 10",
+      "dealerUpcard": 10,
+      "playerTotal": 14,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 3,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "fab4"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "gamblingcalc",
+        "blackjackinfo"
+      ],
+      "notes": "Fab 4. Surrender at TC>=+3, else hit. casinonewsdaily lists +4 (rounded). BJA S17/H17 charts omit row 14 as too marginal to chart. S17=H17."
+    },
+    {
+      "id": "surr15v10",
+      "kind": "hard",
+      "spot": "15 v 10",
+      "dealerUpcard": 10,
+      "playerTotal": 15,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 0,
+      "indexH17": 0,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "fab4"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Blackjack Apprenticeship S17 chart",
+        "Blackjack Apprenticeship H17 chart",
+        "gamblingcalc",
+        "blackjackinfo"
+      ],
+      "notes": "Fab 4. 15v10 is basic LS in S17, so this is a floor: surrender at TC>=0, hit below (BJA '0-'). basicAction=hit is the below-floor play. Coexists with the I18 stand line hard15v10. S17=H17."
+    },
+    {
+      "id": "surr15v9",
+      "kind": "hard",
+      "spot": "15 v 9",
+      "dealerUpcard": 9,
+      "playerTotal": 15,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 2,
+      "indexH17": 2,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "fab4"
+      ],
+      "confidence": "high",
+      "sources": [
+        "Schlesinger Blackjack Attack 3e",
+        "Blackjack Apprenticeship S17 chart",
+        "Blackjack Apprenticeship H17 chart",
+        "gamblingcalc",
+        "blackjackinfo"
+      ],
+      "notes": "Fab 4. Deviate TO surrender at TC>=+2 (BJA S17/H17 both '2+'). casinonewsdaily +3 is an outlier. S17=H17."
+    },
+    {
+      "id": "surr15vA",
+      "kind": "hard",
+      "spot": "15 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 15,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 2,
+      "indexH17": -1,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "fab4"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Blackjack Apprenticeship S17 chart",
+        "Blackjack Apprenticeship H17 chart",
+        "casinonewsdaily",
+        "Schlesinger Blackjack Attack 3e"
+      ],
+      "notes": "Fab 4, large real S17/H17 split. S17: deviate to surrender at +2 (BJA/casinonewsdaily); Schlesinger floored gives +1 (see unresolved). H17: 15vA is basic LS -> floor at -1 (surrender at TC>=-1, hit below)."
+    },
+    {
+      "id": "surr16v8",
+      "kind": "hard",
+      "spot": "16 v 8",
+      "dealerUpcard": 8,
+      "playerTotal": 16,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 4,
+      "indexH17": 4,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Blackjack Apprenticeship S17 chart",
+        "Blackjack Apprenticeship H17 chart"
+      ],
+      "notes": "Extended LS. Deviate to surrender at TC>=+4 (BJA S17/H17 both '4+'). Coexists with the extended stand line hard16v8. Some lists give +5. S17=H17."
+    },
+    {
+      "id": "surr16v9",
+      "kind": "hard",
+      "spot": "16 v 9",
+      "dealerUpcard": 9,
+      "playerTotal": 16,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": -1,
+      "indexH17": -1,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Blackjack Apprenticeship S17 chart",
+        "Blackjack Apprenticeship H17 chart",
+        "blackjackinfo"
+      ],
+      "notes": "Extended LS. 16v9 is basic LS in both rulesets -> surrender floor at -1 (BJA '-1-'), gte convention. Some lists put the floor at 0. Coexists with I18 stand hard16v9. S17=H17."
+    },
+    {
+      "id": "surr16v10",
+      "kind": "hard",
+      "spot": "16 v 10",
+      "dealerUpcard": 10,
+      "playerTotal": 16,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": -2,
+      "indexH17": -2,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Blackjack Apprenticeship S17 chart",
+        "Blackjack Apprenticeship H17 chart",
+        "blackjackinfo"
+      ],
+      "notes": "Extended LS. 16v10 is basic LS in both rulesets ('SUR' = surrender at all practical counts); the deep negative floor at which you'd stop is unpublished (forum ~ -2 to -4). Effectively always surrender. Coexists with I18 stand hard16v10."
+    },
+    {
+      "id": "surr16vA",
+      "kind": "hard",
+      "spot": "16 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 16,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": -4,
+      "indexH17": -5,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Blackjack Apprenticeship S17 chart",
+        "Blackjack Apprenticeship H17 chart",
+        "blackjackinfo"
+      ],
+      "notes": "Extended LS. 16vA is basic LS in both rulesets ('SUR', surrender at all counts); only a deep-negative floor (approx S17 -4, H17 -5, H17 deeper) stops surrender. Integers approximate. Coexists with stand hard16vA."
+    },
+    {
+      "id": "surr14vA",
+      "kind": "hard",
+      "spot": "14 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 14,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 5,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "blackjackinfo full Hi-Lo index list (8-deck S17)"
+      ],
+      "notes": "WEAK, single non-authoritative source (~+5). Not in Schlesinger Fab 4 nor on BJA charts; fails a two-source bar. Retained as low-confidence extended; H17 unpublished (null). Candidate for removal."
+    },
+    {
+      "id": "surr14v9",
+      "kind": "hard",
+      "spot": "14 v 9",
+      "dealerUpcard": 9,
+      "playerTotal": 14,
+      "pairRank": null,
+      "action": "surrender",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 6,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "blackjackinfo full Hi-Lo index list (8-deck S17)"
+      ],
+      "notes": "WEAK, single non-authoritative source (~+6); another list cites +4. Marginal, rarely reached. Retained low-confidence; H17 unpublished (null). Candidate for removal."
+    },
+    {
+      "id": "hard16v8",
+      "kind": "hard",
+      "spot": "16 v 8",
+      "dealerUpcard": 8,
+      "playerTotal": 16,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 7,
+      "indexH17": 7,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack",
+        "GameMaster / Blackjack Review Lesson 14"
+      ],
+      "notes": "Stand 16v8 at TC>=+7; interpolated between 16v9 (+5) and 16v7. Non-Ace, S17=H17. Coexists with surr16v8."
+    },
+    {
+      "id": "hard16v7",
+      "kind": "hard",
+      "spot": "16 v 7",
+      "dealerUpcard": 7,
+      "playerTotal": 16,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 9,
+      "indexH17": 9,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack",
+        "GameMaster / Blackjack Review Lesson 14"
+      ],
+      "notes": "Wong-style +9 vs a Wizard of Vegas DD-H17 list giving +5 (that list may be a transcription error). Unresolved; kept +9. Rarely reached. Non-Ace, S17=H17."
+    },
+    {
+      "id": "hard16vA",
+      "kind": "hard",
+      "spot": "16 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 16,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 3,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 14",
+        "Wong Professional Blackjack",
+        "Wizard of Vegas Hi-Lo DD-H17 thread"
+      ],
+      "notes": "Stand 16vA at TC>=+3 (corroborated H17 value). The game-type report treats S17 as impractical (~+7); kept researcher +3 for both but see unresolved. In H17 LS games many surrender (surr16vA) instead."
+    },
+    {
+      "id": "hard15v9",
+      "kind": "hard",
+      "spot": "15 v 9",
+      "dealerUpcard": 9,
+      "playerTotal": 15,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 8,
+      "indexH17": 8,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack",
+        "GameMaster / Blackjack Review Lesson 14"
+      ],
+      "notes": "Stand line (~+8), distinct from the Fab 4 surrender surr15v9 (+2). Uncorroborated integer. Non-Ace, S17=H17."
+    },
+    {
+      "id": "hard15v8",
+      "kind": "hard",
+      "spot": "15 v 8",
+      "dealerUpcard": 8,
+      "playerTotal": 15,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 10,
+      "indexH17": 10,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack",
+        "GameMaster / Blackjack Review Lesson 14"
+      ],
+      "notes": "Stand 15v8 at TC>=+10; effectively never reached. Uncorroborated. Non-Ace, S17=H17."
+    },
+    {
+      "id": "hard15vA",
+      "kind": "hard",
+      "spot": "15 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 15,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 5,
+      "indexH17": 5,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 14",
+        "Wong Professional Blackjack",
+        "Wizard of Vegas Hi-Lo DD-H17 thread"
+      ],
+      "notes": "Stand +5 (corroborated H17). Distinct from Fab 4 surrender surr15vA. Game-type report considers the S17 stand impractical/none, real only under H17 (+5); kept 5/5, see unresolved."
+    },
+    {
+      "id": "hard14v10",
+      "kind": "hard",
+      "spot": "14 v 10",
+      "dealerUpcard": 10,
+      "playerTotal": 14,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 8,
+      "indexH17": 8,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack"
+      ],
+      "notes": "Stand line (~+8), distinct from Fab 4 surrender surr14v10 (+3). Pattern-derived, sources spread +8 to +10. Non-Ace, S17=H17."
+    },
+    {
+      "id": "hard14vA",
+      "kind": "hard",
+      "spot": "14 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 14,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 9,
+      "indexH17": 9,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 14",
+        "Wong Professional Blackjack"
+      ],
+      "notes": "Stand 14vA at TC>=+9 (S17 claim). Uncorroborated; H17 likely differs by ~1 but shown equal. Coexists with surr14vA."
+    },
+    {
+      "id": "hard13v4",
+      "kind": "hard",
+      "spot": "13 v 4",
+      "dealerUpcard": 4,
+      "playerTotal": 13,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": -4,
+      "indexH17": -4,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack"
+      ],
+      "notes": "Lower-bound stand, gte with negative index (stand at TC>=-4, hit below), consistent with 13v2/13v3. basicAction='hit' is the below-index action (basic actually stands 13v4). Some tables ~ -5. Non-Ace, S17=H17."
+    },
+    {
+      "id": "hard12v7",
+      "kind": "hard",
+      "spot": "12 v 7",
+      "dealerUpcard": 7,
+      "playerTotal": 12,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": null,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack"
+      ],
+      "notes": "Effectively a non-deviation: stand crossover at a very deep positive TC never reached, play stays 'always hit'. Null index; placeholder only, candidate for removal. Non-Ace, S17=H17."
+    },
+    {
+      "id": "hard10v9",
+      "kind": "hard",
+      "spot": "10 v 9",
+      "dealerUpcard": 9,
+      "playerTotal": 10,
+      "pairRank": null,
+      "action": "hit",
+      "basicAction": "double",
+      "comparator": "lte",
+      "indexS17": -2,
+      "indexH17": -2,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 15",
+        "Wong Professional Blackjack",
+        "Wizard of Vegas Hi-Lo DD-H17 thread"
+      ],
+      "notes": "Poor-deck play: basic doubles 10v9, revert to HIT at TC<=-2 (lte). Corroborated by WoV DD-H17 list. Non-Ace, S17=H17."
+    },
+    {
+      "id": "hard9v3",
+      "kind": "hard",
+      "spot": "9 v 3",
+      "dealerUpcard": 3,
+      "playerTotal": 9,
+      "pairRank": null,
+      "action": "hit",
+      "basicAction": "double",
+      "comparator": "lte",
+      "indexS17": -1,
+      "indexH17": -1,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 15",
+        "Wong Professional Blackjack",
+        "Wizard of Vegas Hi-Lo DD-H17 thread"
+      ],
+      "notes": "Poor-deck play: basic doubles 9v3, revert to HIT at TC<=-1 (lte). Corroborated by WoV DD-H17 list. Non-Ace, S17=H17."
+    },
+    {
+      "id": "hard9vA",
+      "kind": "hard",
+      "spot": "9 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 9,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": null,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack"
+      ],
+      "notes": "Effectively a non-deviation: 9vA double crossover at a very deep positive TC never reached; play stays 'hit'. Null index; placeholder, candidate for removal."
+    },
+    {
+      "id": "hard8v5",
+      "kind": "hard",
+      "spot": "8 v 5",
+      "dealerUpcard": 5,
+      "playerTotal": 8,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 6,
+      "indexH17": 6,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 15",
+        "Wong Professional Blackjack",
+        "Wizard of Vegas Hi-Lo DD-H17 thread"
+      ],
+      "notes": "Index-triggered double (8 never doubles in basic). GameMaster +6 vs WoV DD-H17 +3 (see unresolved); given near deck-independence +3 casts doubt on +6. Kept +6, low confidence. Non-Ace, S17=H17."
+    },
+    {
+      "id": "hard8v6",
+      "kind": "hard",
+      "spot": "8 v 6",
+      "dealerUpcard": 6,
+      "playerTotal": 8,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 3,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 15",
+        "Wong Professional Blackjack",
+        "Wizard of Vegas Hi-Lo DD-H17 thread"
+      ],
+      "notes": "Index-triggered double. GameMaster +3 vs WoV DD-H17 +1 (see unresolved). Kept +3, low confidence. Non-Ace, S17=H17."
+    },
+    {
+      "id": "soft20v4",
+      "kind": "soft",
+      "spot": "A,9 v 4",
+      "dealerUpcard": 4,
+      "playerTotal": 20,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 6,
+      "indexH17": 6,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Schlesinger Blackjack Attack 3e"
+      ],
+      "notes": "High-count soft-20 double at TC>=+6; monotonic with v5/v6 (+5/+4). Dealer 4 rarely reaches soft 17, S17~H17. Exact integer print-only, medium confidence."
+    },
+    {
+      "id": "soft20v5",
+      "kind": "soft",
+      "spot": "A,9 v 5",
+      "dealerUpcard": 5,
+      "playerTotal": 20,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 5,
+      "indexH17": 5,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Schlesinger Blackjack Attack 3e"
+      ],
+      "notes": "Soft-20 double vs 5 at TC>=+5; fits +4/+5/+6 progression. Minor H17 effect, kept 5/5. Medium confidence."
+    },
+    {
+      "id": "soft20v6",
+      "kind": "soft",
+      "spot": "A,9 v 6",
+      "dealerUpcard": 6,
+      "playerTotal": 20,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 4,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Schlesinger Blackjack Attack 3e"
+      ],
+      "notes": "Soft-20 double vs 6 at TC>=+4 (S17); dealer 6 can reach soft 17 so H17 ~+3 (direction correct). Some charts keep +4 for both. Medium confidence."
+    },
+    {
+      "id": "soft19v4",
+      "kind": "soft",
+      "spot": "A,8 v 4",
+      "dealerUpcard": 4,
+      "playerTotal": 19,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 5,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Schlesinger Blackjack Attack 3e"
+      ],
+      "notes": "Soft-19 double vs 4, classic S17/H17 divergence (H17 lower). Sources spread ~+4 to +6 S17; the game-type report tabulates +3 unchanged (see unresolved). Kept researcher 5/3, low confidence."
+    },
+    {
+      "id": "soft19v5",
+      "kind": "soft",
+      "spot": "A,8 v 5",
+      "dealerUpcard": 5,
+      "playerTotal": 19,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 3,
+      "indexH17": 1,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Schlesinger Blackjack Attack 3e"
+      ],
+      "notes": "Soft-19 double vs 5. Some lists ~+5 S17; game-type report tabulates +1 unchanged (see unresolved). Kept researcher 3/1, low confidence."
+    },
+    {
+      "id": "soft19v6",
+      "kind": "soft",
+      "spot": "A,8 v 6",
+      "dealerUpcard": 6,
+      "playerTotal": 19,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 1,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended",
+        "catch22"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Blackjack Apprenticeship",
+        "Wizard of Vegas forum"
+      ],
+      "notes": "S17: basic stands, double at TC>=+1 (gte). H17: doubling A,8 v6 is basic strategy so no rich-deck deviation -> indexH17 null (matches soft18v2/soft17v2). The game-type report instead flags an H17 poor-deck lte 'stop-doubling' play at negative counts (see unresolved)."
+    },
+    {
+      "id": "soft18v2",
+      "kind": "soft",
+      "spot": "A,7 v 2",
+      "dealerUpcard": 2,
+      "playerTotal": 18,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 1,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Blackjack Apprenticeship",
+        "Wizard of Vegas forum"
+      ],
+      "notes": "S17 basic stands; double at TC>=+1. Under H17 A,7 v2 is basic-strategy double -> indexH17 null. S17 integer cited 0 to +2; kept +1, low confidence."
+    },
+    {
+      "id": "soft18v9",
+      "kind": "soft",
+      "spot": "A,7 v 9",
+      "dealerUpcard": 9,
+      "playerTotal": 18,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 3,
+      "indexH17": 3,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Schlesinger Blackjack Attack 3e"
+      ],
+      "notes": "Soft-18 stand vs 9: basic hits, stand at TC>=+3 (gte). Dealer 9 cannot form soft 17, S17=H17. Minor play, low confidence on integer."
+    },
+    {
+      "id": "soft18vA",
+      "kind": "soft",
+      "spot": "A,7 v A",
+      "dealerUpcard": 11,
+      "playerTotal": 18,
+      "pairRank": null,
+      "action": "stand",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 1,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Wizard of Vegas forum",
+        "Blackjack Apprenticeship"
+      ],
+      "notes": "S17: basic hits, stand at TC>=+1 (gte). Under H17 the dealer hits soft 17, making standing on 18 vs A worse -> always hit, no reachable stand deviation, indexH17 null."
+    },
+    {
+      "id": "soft17v2",
+      "kind": "soft",
+      "spot": "A,6 v 2",
+      "dealerUpcard": 2,
+      "playerTotal": 17,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 1,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "Wizard of Odds"
+      ],
+      "notes": "S17 basic hits vs 2; double at TC>=+1. Under H17 A,6 v2 is basic-strategy double -> indexH17 null. S17 integer ~+1, low confidence."
+    },
+    {
+      "id": "soft13v4",
+      "kind": "soft",
+      "spot": "A,2 v 4",
+      "dealerUpcard": 4,
+      "playerTotal": 13,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 6,
+      "indexH17": 4,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)"
+      ],
+      "notes": "6D S17 basic hits vs 4; double at high count (~+5 to +6), H17 a couple lower (direction correct). Single-source, integer unverified."
+    },
+    {
+      "id": "soft13v5",
+      "kind": "soft",
+      "spot": "A,2 v 5",
+      "dealerUpcard": 5,
+      "playerTotal": 13,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "double",
+      "comparator": "gte",
+      "indexS17": 0,
+      "indexH17": 0,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)",
+        "blackjackinfo forum"
+      ],
+      "notes": "6D S17 basic already doubles vs 5, so this is a near-break-even floor (double at/above ~0, hit below); true crossover slightly negative, index 0 approximate. Low confidence."
+    },
+    {
+      "id": "soft14v4",
+      "kind": "soft",
+      "spot": "A,3 v 4",
+      "dealerUpcard": 4,
+      "playerTotal": 14,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "hit",
+      "comparator": "gte",
+      "indexS17": 5,
+      "indexH17": 4,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)"
+      ],
+      "notes": "6D S17 basic hits vs 4; double at high count (~+4 to +5), H17 slightly lower. Single-source, low confidence."
+    },
+    {
+      "id": "soft14v5",
+      "kind": "soft",
+      "spot": "A,3 v 5",
+      "dealerUpcard": 5,
+      "playerTotal": 14,
+      "pairRank": null,
+      "action": "double",
+      "basicAction": "double",
+      "comparator": "gte",
+      "indexS17": 0,
+      "indexH17": 0,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "Wong Professional Blackjack (Appendix A)"
+      ],
+      "notes": "6D S17 basic already doubles vs 5; near-zero floor like A,2 v5. Index 0 approximate, low confidence."
+    },
+    {
+      "id": "pair10v4",
+      "kind": "pair",
+      "spot": "10,10 v 4",
+      "dealerUpcard": 4,
+      "playerTotal": null,
+      "pairRank": "10",
+      "action": "split",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 6,
+      "indexH17": 6,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Wong Professional Blackjack (full appendix)",
+        "QFIT CVData"
+      ],
+      "notes": "Extended split-tens completing the series (v6 +4, v5 +5, v4 +6). Split at TC>=+6, S17=H17. Very high heat, rarely arises. Not part of core I18."
+    },
+    {
+      "id": "pair8v10",
+      "kind": "pair",
+      "spot": "8,8 v 10 (surrender)",
+      "dealerUpcard": 10,
+      "playerTotal": null,
+      "pairRank": "8",
+      "action": "surrender",
+      "basicAction": "split",
+      "comparator": "gte",
+      "indexS17": 1,
+      "indexH17": 1,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "medium",
+      "sources": [
+        "Wong Professional Blackjack (1994, 4+ deck)",
+        "blackjacktheforum.com",
+        "Wizard of Vegas forum"
+      ],
+      "notes": "Late-surrender deviation: surrender 8,8 v 10 at TC>=+1 (Wong NDAS, both S17/H17). Merged the duplicate surr88v10 record (which gave 0) into this entry; CVData shows 0 (see unresolved). With DAS the index rises to ~+2. When surrender is offered it overrides splitting."
+    },
+    {
+      "id": "pair8v10stand",
+      "kind": "pair",
+      "spot": "8,8 v 10 (stand, no surrender)",
+      "dealerUpcard": 10,
+      "playerTotal": null,
+      "pairRank": "8",
+      "action": "stand",
+      "basicAction": "split",
+      "comparator": "gte",
+      "indexS17": 8,
+      "indexH17": 8,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 16",
+        "Wizard of Vegas forum"
+      ],
+      "notes": "No-surrender line: above TC>=+8 stop splitting and stand on the 16. Kept as a separate entry from the surrender line pair8v10 (distinct action). Relevant only when LS unavailable; risk-averse figure, marginal EV."
+    },
+    {
+      "id": "pair8vA",
+      "kind": "pair",
+      "spot": "8,8 v A (surrender)",
+      "dealerUpcard": 11,
+      "playerTotal": null,
+      "pairRank": "8",
+      "action": "surrender",
+      "basicAction": "split",
+      "comparator": "gte",
+      "indexS17": 7,
+      "indexH17": null,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": true,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "blackjackinfo",
+        "Wizard of Odds / standard H17 charts"
+      ],
+      "notes": "S17: basic splits 8,8; a single forum source proposes surrender-instead-of-split at ~+7 (uncorroborated). Under H17 8,8 vA is basic LS (not a count deviation) and the count play reverses to split at high count, so the deviate-to-surrender framing does not apply -> indexH17 null. Low confidence, candidate for removal. (id uses pair-namespace to avoid colliding with hard surr16vA.)"
+    },
+    {
+      "id": "pair9v7",
+      "kind": "pair",
+      "spot": "9,9 v 7",
+      "dealerUpcard": 7,
+      "playerTotal": null,
+      "pairRank": "9",
+      "action": "split",
+      "basicAction": "stand",
+      "comparator": "gte",
+      "indexS17": 6,
+      "indexH17": 6,
+      "deckScope": "all",
+      "requiresDAS": false,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 16"
+      ],
+      "notes": "Basic stands (18 vs likely 17). GameMaster gives 'split at 6' (risk-averse); EV-max sources ~+3, so true index likely lower. DAS-independent. Kept +6, low confidence."
+    },
+    {
+      "id": "pair6v2",
+      "kind": "pair",
+      "spot": "6,6 v 2",
+      "dealerUpcard": 2,
+      "playerTotal": null,
+      "pairRank": "6",
+      "action": "hit",
+      "basicAction": "split",
+      "comparator": "lte",
+      "indexS17": -2,
+      "indexH17": -2,
+      "deckScope": "all",
+      "requiresDAS": true,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 16"
+      ],
+      "notes": "DAS-gated: basic splits 6,6 v2, poor-deck deviation is HIT at TC<=-2 (lte). blackjackreview says '-2 or lower', blackjackinfo mirror says '-1'. Requires DAS. Low value."
+    },
+    {
+      "id": "pair3v2",
+      "kind": "pair",
+      "spot": "3,3 v 2",
+      "dealerUpcard": 2,
+      "playerTotal": null,
+      "pairRank": "3",
+      "action": "hit",
+      "basicAction": "split",
+      "comparator": "lte",
+      "indexS17": 0,
+      "indexH17": 0,
+      "deckScope": "all",
+      "requiresDAS": true,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 16"
+      ],
+      "notes": "DAS-gated: basic splits 3,3 v2, deviation is HIT at TC<=0 (lte). Both mirrors agree on 0. Requires DAS. Marginal."
+    },
+    {
+      "id": "pair4v5",
+      "kind": "pair",
+      "spot": "4,4 v 5",
+      "dealerUpcard": 5,
+      "playerTotal": null,
+      "pairRank": "4",
+      "action": "hit",
+      "basicAction": "split",
+      "comparator": "lte",
+      "indexS17": 0,
+      "indexH17": 0,
+      "deckScope": "all",
+      "requiresDAS": true,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 16"
+      ],
+      "notes": "DAS-gated: basic splits 4,4 v5, deviation is HIT (lte). blackjackreview says 0, blackjackinfo mirror -1. Requires DAS. Low value."
+    },
+    {
+      "id": "pair4v6",
+      "kind": "pair",
+      "spot": "4,4 v 6",
+      "dealerUpcard": 6,
+      "playerTotal": null,
+      "pairRank": "4",
+      "action": "hit",
+      "basicAction": "split",
+      "comparator": "lte",
+      "indexS17": -2,
+      "indexH17": -2,
+      "deckScope": "all",
+      "requiresDAS": true,
+      "requiresSurrender": false,
+      "tags": [
+        "extended"
+      ],
+      "confidence": "low",
+      "sources": [
+        "GameMaster / Blackjack Review Lesson 16"
+      ],
+      "notes": "DAS-gated: basic splits 4,4 v6, deviation is HIT at TC<=-2 (lte). Both mirrors agree. Requires DAS. Low value."
+    }
+  ],
+  "unresolved": [
+    {
+      "spot": "15 v A (surrender)",
+      "issue": "S17 index disputed: Schlesinger floored gives +1 (the game-type report recommends this), while the Blackjack Apprenticeship S17 chart and casinonewsdaily give +2. Entry kept at +2; H17 (-1) is agreed."
+    },
+    {
+      "spot": "16 v A (stand)",
+      "issue": "S17 index disputed: researcher/GameMaster corroborate ~+3, but the game-type report treats the S17 stand as impractical (~+7, rarely reached). H17 (+3) is agreed. Entry kept at 3/3."
+    },
+    {
+      "spot": "15 v A (stand)",
+      "issue": "Whether an S17 stand deviation exists at all: researcher gives +5 for both rulesets, but the game-type report says 15v10... 15vA only becomes a stand play under H17 (+5) and is null/impractical under S17. Entry kept at 5/5."
+    },
+    {
+      "spot": "A,8 v 6 (soft 19, H17)",
+      "issue": "H17 encoding disputed: treated here as indexH17 null (doubling is H17 basic strategy, no rich-deck deviation), but the game-type report argues a genuine poor-deck lte 'stop-doubling' play at negative counts under H17. A single record cannot hold both an S17 gte double (+1) and an H17 lte no-double."
+    },
+    {
+      "spot": "12 v 6 (stand)",
+      "issue": "H17 index disputed: game-type report lists 12v6 among UNCHANGED hands (H17 = S17 = -1, adopted here), but a category researcher argued H17 drops to -3 on directional dealer-6 bust-rate reasoning."
+    },
+    {
+      "spot": "16 v 9 (stand)",
+      "issue": "Rounding disagreement: Schlesinger/Wong/Wizard/gamblingcalc give +5 (adopted); Blackjack Apprenticeship floored charts give +4."
+    },
+    {
+      "spot": "8,8 v 10 (surrender)",
+      "issue": "Wong (1994) gives +1 (adopted); Casino Verite CVData built-in Wong index shows 0."
+    },
+    {
+      "spot": "16 v 7 / 8 v 5 / 8 v 6",
+      "issue": "Wong/GameMaster values (+9 / +6 / +3, adopted) conflict with a Wizard of Vegas DD-H17 list (+5 / +3 / +1); given near deck-independence of TC indices the lower figures are credible, so these integers are unverified."
+    },
+    {
+      "spot": "A,8 v 4 / A,8 v 5 (soft 19 doubles)",
+      "issue": "Absolute value and H17 behavior disputed: researcher gives 5/3 and 3/1 (H17 lower); the game-type report tabulates +3 and +1 unchanged across S17/H17. Entries kept at researcher values, low confidence."
+    }
+  ]
+}

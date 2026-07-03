@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import {
+  RANK_VALUE,
   type Action,
   type BotActionView,
   type Card,
@@ -163,6 +164,38 @@ export const useGame = create<GameInternal>()(
       : null
   }
 
+  /** Enabled hand shapes for training; all-off is treated as all-on. */
+  const handKinds = (): { hard: boolean; soft: boolean; pair: boolean } => {
+    const st = settings()
+    const f = { hard: st.trainHard, soft: st.trainSoft, pair: st.trainPairs }
+    return f.hard || f.soft || f.pair ? f : { hard: true, soft: true, pair: true }
+  }
+
+  /** Shape of a two-card hand: pair beats soft, matching strategy routing. */
+  const dealtKind = (a: Card, b: Card): 'hard' | 'soft' | 'pair' => {
+    if (RANK_VALUE[a.rank] === RANK_VALUE[b.rank]) return 'pair'
+    if (a.rank === 'A' || b.rank === 'A') return 'soft'
+    return 'hard'
+  }
+
+  /**
+   * Draw an opening-deal card for a human hand under the hand-type filter.
+   * The first card only needs to keep an enabled shape reachable (hard-only
+   * bans an ace — every ace hand is soft or a pair); the second must complete
+   * an enabled shape. With no filter this is a plain draw, and drawMatching
+   * falls back to one when the shoe can't satisfy the shape.
+   */
+  const drawHumanCard = (shoe: Shoe, hand: PlayerHandView): Card => {
+    const f = handKinds()
+    if (f.hard && f.soft && f.pair) return shoe.draw()
+    if (hand.cards.length === 0) {
+      if (!f.soft && !f.pair) return shoe.drawMatching((c) => c.rank !== 'A')
+      return shoe.draw()
+    }
+    const first = hand.cards[0]
+    return shoe.drawMatching((c) => f[dealtKind(first, c)])
+  }
+
   // --- tick scheduling -----------------------------------------------------
   // At most one pending timer; module state, deliberately NOT persisted.
   let tickTimer: ReturnType<typeof setTimeout> | null = null
@@ -303,7 +336,8 @@ export const useGame = create<GameInternal>()(
       for (const seat of seats) {
         for (const hand of seat.hands) {
           if (hand.cards.length === count) {
-            const c = shoe.draw()
+            // Your boxes honor the hand-type filter; bots draw naturally.
+            const c = seat.isHuman ? drawHumanCard(shoe, hand) : shoe.draw()
             hand.cards.push(c)
             refreshValue(hand)
             reveal([c])
@@ -916,6 +950,7 @@ export const useGame = create<GameInternal>()(
         ruleset: st.ruleset,
         deviationRange: devRange(),
         includeFalseSpots: st.drillFalseSpots,
+        handKinds: handKinds(),
         // Fresh seed per session so the false-spot shuffle differs each time;
         // the engine itself stays a pure function of its options.
         shuffleSeed: Date.now(),
@@ -947,6 +982,7 @@ export const useGame = create<GameInternal>()(
         das: st.dasEnabled,
         ruleset: st.ruleset,
         deviationRange: devRange(),
+        handKinds: handKinds(),
         // Fresh seed per session so decoy picks + shuffle differ each time;
         // the engine itself stays a pure function of its options.
         shuffleSeed: Date.now(),

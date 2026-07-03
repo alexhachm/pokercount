@@ -181,6 +181,9 @@ export default function SettingsScreen() {
   const dealSpeed = useSettings((s) => s.dealSpeed)
   const showHandTotals = useSettings((s) => s.showHandTotals)
   const drillFalseSpots = useSettings((s) => s.drillFalseSpots)
+  const trainHard = useSettings((s) => s.trainHard)
+  const trainSoft = useSettings((s) => s.trainSoft)
+  const trainPairs = useSettings((s) => s.trainPairs)
   const deviationRangeEnabled = useSettings((s) => s.deviationRangeEnabled)
   const deviationRangeMin = useSettings((s) => s.deviationRangeMin)
   const deviationRangeMax = useSettings((s) => s.deviationRangeMax)
@@ -372,6 +375,44 @@ export default function SettingsScreen() {
               </span>
             </div>
           </Row>
+        </Section>
+
+        <Section title="Hand types">
+          {(() => {
+            // Never allow all three off: lock the last enabled toggle so the
+            // filter can't collapse to "deal nothing".
+            const enabledCount = [trainHard, trainSoft, trainPairs].filter(Boolean).length
+            const lock = (on: boolean) => on && enabledCount === 1
+            return (
+              <>
+                <Row label="Hard hands" hint="Your deals & drill spots include hard totals">
+                  <Toggle
+                    on={trainHard}
+                    disabled={lock(trainHard)}
+                    onChange={(v) => set('trainHard', v)}
+                  />
+                </Row>
+                <Row label="Soft hands" hint="Include ace-counting-as-11 hands">
+                  <Toggle
+                    on={trainSoft}
+                    disabled={lock(trainSoft)}
+                    onChange={(v) => set('trainSoft', v)}
+                  />
+                </Row>
+                <Row label="Pairs" hint="Include pairs (tens count as a pair)">
+                  <Toggle
+                    on={trainPairs}
+                    disabled={lock(trainPairs)}
+                    onChange={(v) => set('trainPairs', v)}
+                  />
+                </Row>
+                <span style={{ fontSize: 12, color: '#7b8aa3' }}>
+                  Applies to the hands YOU are dealt in Play and to both drills. Bots and the
+                  dealer are unaffected.
+                </span>
+              </>
+            )
+          })()}
         </Section>
 
         <Section title="Deviations">

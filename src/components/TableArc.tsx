@@ -104,6 +104,9 @@ export default function TableArc({
             style={{
               left: pos.xPx,
               top: pos.topPx,
+              // Pin the DOM box to the engine's width model so the (wider)
+              // settle chip row wraps inside it instead of widening the box.
+              width: pos.naturalWidth,
               transform: `translateX(-50%) rotate(${pos.rotDeg}deg) scale(${pos.scale})`,
               transformOrigin: '50% 0%',
               zIndex,

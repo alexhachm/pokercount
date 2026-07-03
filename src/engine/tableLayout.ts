@@ -37,8 +37,13 @@ export const HAND_PAD = 16 // HandView p-2, both sides
 export const SPLIT_OVERLAP = 12 // hands within a split box overlap this much
 export const BASE_CARD_OVERLAP = 40 // tight fan: 24px of each buried card shows
 export const MAX_CARD_OVERLAP = 52 // crunch limit: the corner index stays legible
-/** Estimated unscaled box content height (card + label + total chips). */
-const BOX_H = 150
+/**
+ * Estimated unscaled box content height. TableArc pins each box to its
+ * naturalWidth, so the settle chip row (WIN/net — wider than a 2-card fan)
+ * wraps below the cards instead of widening the box; this covers card +
+ * label + total badge + one wrapped chip line.
+ */
+const BOX_H = 185
 /** Keep at least this margin to each screen edge. */
 const EDGE = 4
 
@@ -124,22 +129,36 @@ export function computeTableLayout(width: number, inputs: LayoutBoxInput[]): Tab
     }
 
     const natural = boxWidth(input.handCardCounts, overlap)
-    const effHalf = ((natural * cos + BOX_H * sin) * scale) / 2
-    // Place on the arc, then clamp the center so the box stays on screen.
+    // Rotation happens about the box's TOP-CENTER (transformOrigin '50% 0%'),
+    // so the rotated bounding box is asymmetric around xPx: a clockwise tilt
+    // (rot > 0, left arc) swings the bottom edge left, adding the full
+    // BOX_H·sin to the LEFT extent only — and vice versa. Clamp per side.
+    const extL = (((natural / 2) * cos + (rotDeg > 0 ? BOX_H * sin : 0)) * scale)
+    const extR = (((natural / 2) * cos + (rotDeg < 0 ? BOX_H * sin : 0)) * scale)
     const xIdeal = (width * (50 + t * spanPct)) / 100
-    const xPx =
-      effHalf * 2 >= width - 2 * EDGE
-        ? width / 2
-        : clamp(xIdeal, EDGE + effHalf, width - EDGE - effHalf)
+    const lo = EDGE + extL
+    const hi = width - EDGE - extR
+    // A box wider than the screen splits its overflow evenly.
+    const xPx = lo <= hi ? clamp(xIdeal, lo, hi) : (lo + hi) / 2
 
-    const topPx = (1 - t * t) * dropBase + (crowded ? (i % 2) * 28 : 0)
+    // The same tilt raises one TOP corner above the origin by (W/2)·sin;
+    // push the box down by that so it never paints up into the dealer area.
+    const topRaise = (natural / 2) * sin * scale
+    const topPx = (1 - t * t) * dropBase + (crowded ? (i % 2) * 28 : 0) + topRaise
 
     return { xPx, topPx, rotDeg, scale, cardOverlapPx: overlap, naturalWidth: natural }
   })
 
+  // Rotated vertical extent below the origin: H·cos plus the bottom corner's
+  // (W/2)·sin swing (topPx already absorbed the corner above the origin).
   const heightPx = Math.max(
     200,
-    ...boxes.map((b) => b.topPx + BOX_H * b.scale + 8),
+    ...boxes.map((b) => {
+      const sin = Math.sin((Math.abs(b.rotDeg) * Math.PI) / 180)
+      const cos = Math.cos((Math.abs(b.rotDeg) * Math.PI) / 180)
+      const below = (BOX_H * cos + (b.naturalWidth / 2) * sin) * b.scale
+      return b.topPx + below + 8
+    }),
   )
   return { boxes, heightPx }
 }

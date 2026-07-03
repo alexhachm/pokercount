@@ -47,6 +47,17 @@ interface DrillOpts {
   includeFalseSpots?: boolean
   /** Seed for the decoy counts + shuffle; same seed => same queue. */
   shuffleSeed?: number
+  /** When set, only drill index plays of the enabled hand kinds. */
+  handKinds?: { hard: boolean; soft: boolean; pair: boolean } | null
+}
+
+/** Whether an index play's hand kind passes the (optional) hand-type filter. */
+function kindEnabled(
+  kinds: DrillOpts['handKinds'],
+  kind: IndexPlay['kind'],
+): boolean {
+  if (!kinds || kind === 'insurance') return true
+  return kinds[kind]
 }
 
 /** Build a stable, unique Card from a rank + a tag that disambiguates the id. */
@@ -284,6 +295,7 @@ export function buildDrillQueue(opts: DrillOpts): DrillScenario[] {
     (p) =>
       p.kind !== 'insurance' &&
       p.upcard != null &&
+      kindEnabled(opts.handKinds, p.kind) &&
       (!range || (p.index >= range.min && p.index <= range.max)),
   )
 
@@ -413,6 +425,7 @@ export function buildTcDrillQueue(opts: DrillOpts): TcDrillScenario[] {
       p.kind !== 'insurance' &&
       p.upcard != null &&
       (opts.surrenderEnabled || p.action !== 'surrender') &&
+      kindEnabled(opts.handKinds, p.kind) &&
       (!range || (p.index >= range.min && p.index <= range.max)),
   )
 
